@@ -2,34 +2,33 @@
 
 # ─────────────────────────────────────────────
 # window.py
-# Main HMI window — layout, button logic,
-# process management, E-STOP state machine
+# Main HMI window — layout, button logic, and
+# page navigation. Process/subprocess handling
+# lives in process_manager.py, E-STOP state
+# machine lives in estop_controller.py, and QSS
+# strings live in styles.py.
 # ─────────────────────────────────────────────
-
-import subprocess
-import os
-import signal
-import time
-from io import StringIO
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QStackedWidget,
     QVBoxLayout, QHBoxLayout, QGridLayout,
-    QPushButton, QLabel, QSizePolicy,
+    QPushButton, QLabel,
     QPlainTextEdit,
 )
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import QThread, pyqtSignal
 
+import styles
 from ros_bridge import ROSBridge
 from widgets import ModeButton
 from jog_page import JogPage
 from joint_page import JointPage
+from process_manager import ProcessManager
+from estop_controller import EstopController
 
 # Page indices for QStackedWidget
 PAGE_MAIN = 0
-PAGE_JOG  = 1
+PAGE_JOG = 1
 PAGE_JOINT = 2
 
 HOME_LABEL = "Home Robot"
@@ -40,34 +39,6 @@ ENCODER_SUB = "XY workspace control"
 
 ENABLE_LABEL = "Enable Robot"
 ENABLE_SUB = "Start MoveIt stack"
-
-
-class ProcessLogReader(QThread):
-    line_received = pyqtSignal(str)
-
-    def __init__(self, process):
-        super().__init__()
-        self.process = process
-        self._running = True
-
-    def run(self):
-        if not self.process or not self.process.stdout:
-            return
-
-        while self._running:
-            try:
-                line = self.process.stdout.readline()
-            except Exception:
-                break
-
-            if not line:
-                self.msleep(10)
-                continue
-
-            self.line_received.emit(line.rstrip())
-
-    def stop(self):
-        self._running = False
 
 
 class HMIWindow(QMainWindow):
@@ -81,41 +52,28 @@ class HMIWindow(QMainWindow):
         self.home_btn = None
         self.encoder_btn = None
         self.enable_robot_btn = None
+        self.manual_btn = None
 
-        # ── Process handles ──
-        self.robot_process = None
-        self.manual_init_process = None
-        self.manual_init_running = False
-        self.encoder_process = None
-        self.encoder_processes = []
-        self.encoder_running = False
-        self.log_buffer = StringIO()
-        self.last_flush = 0
-        self.jog_listener_process = None
-
-        # ── E-STOP state ──
-        self.estop_latched = False
-        self.estop_reset_ready = False
-        self.estop_hold_time = 0
-        self.estop_hold_required = 3000  # ms
-
-        self.estop_hold_timer = QTimer()
-        self.estop_hold_timer.setInterval(50)
-        self.estop_hold_timer.timeout.connect(self._update_estop_hold)
+        self.procs = ProcessManager(log_fn=self._print)
 
         self.setWindowTitle("CRX-10iA Control")
         self.setFixedSize(1024, 600)
         self.show()
-        #self.showFullScreen()
-        #self.resize(960, 540)
-        #self.show()
-        
 
         self._build_ui()
 
+        # E-STOP is wired up after the UI exists, since it needs
+        # self.estop_btn and a handful of callbacks into this window.
+        self.estop = EstopController(
+            estop_btn=self.estop_btn,
+            log_fn=self._print,
+            trigger_fn=self._on_estop_trigger,
+            kill_fn=self._on_estop_kill,
+            reset_ui_fn=self._reset_all_ui,
+            set_mode_fn=self._set_mode,
+        )
+
         ros.mode_changed.connect(self._on_mode_changed)
-        
-        self.log_thread = None
 
     # =========================================================
     # Logging
@@ -127,7 +85,13 @@ class HMIWindow(QMainWindow):
             return
         self.term_output.appendPlainText(msg)
         self.term_output.ensureCursorVisible()
-        
+
+    def _print(self, *args, sep=" ", end="\n"):
+        msg = sep.join(str(a) for a in args)
+        self._log(msg)
+
+    def _set_mode(self, mode: str):
+        self.current_mode = mode
 
     # =========================================================
     # UI Construction
@@ -136,7 +100,7 @@ class HMIWindow(QMainWindow):
     def _build_ui(self):
         # ── Root container ──
         root_widget = QWidget()
-        root_widget.setStyleSheet("background-color: #000000;")
+        root_widget.setStyleSheet(styles.ROOT_BACKGROUND)
         self.setCentralWidget(root_widget)
 
         root_layout = QVBoxLayout(root_widget)
@@ -154,14 +118,11 @@ class HMIWindow(QMainWindow):
         self.jog_page = JogPage(self.ros, back_callback=self._show_main)
         self.stack.addWidget(self.jog_page)
 
-        #Page 2 - Joint jog screen
+        # Page 2 — joint jog screen
         self.joint_page = JointPage(self.ros, back_callback=self._show_main)
         self.stack.addWidget(self.joint_page)
-        
 
         self.stack.setCurrentIndex(PAGE_MAIN)
-        
-        
 
     def _build_main_page(self):
         page = QWidget()
@@ -181,39 +142,16 @@ class HMIWindow(QMainWindow):
 
         header = QLabel("Etch-a-Sketch Demo")
         header.setFont(QFont("Arial", 20))
-        header.setStyleSheet("color: #FFD100;")
+        header.setStyleSheet(styles.HEADER_LABEL)
 
         min_btn = QPushButton("—")
         min_btn.setFixedSize(40, 40)
-        min_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1a1a1a;
-                color: #FFFFFF;
-                border: 1px solid #FFFFFF;
-                border-radius: 8px;
-                font-size: 18px;
-            }
-            QPushButton:pressed {
-                background-color: #333333;
-            }
-        """)
+        min_btn.setStyleSheet(styles.MIN_BUTTON)
         min_btn.clicked.connect(self.showMinimized)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(40, 40)
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #330000;
-                color: #D91433;
-                border: 1px solid #D91433;
-                border-radius: 8px;
-                font-size: 18px;
-                font-weight: bold;
-            }
-            QPushButton:pressed {
-                background-color: #550000;
-            }
-        """)
+        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
         close_btn.clicked.connect(self.close)
 
         header_row.addWidget(header)
@@ -225,9 +163,7 @@ class HMIWindow(QMainWindow):
 
     def _build_status_bar(self):
         self.status_bar = QWidget()
-        self.status_bar.setStyleSheet(
-            "background: #00a651; border: 1px solid #ffffff; border-radius: 10px;"
-        )
+        self.status_bar.setStyleSheet(styles.STATUS_BAR)
 
         status_layout = QVBoxLayout(self.status_bar)
         status_layout.setContentsMargins(16, 10, 16, 10)
@@ -235,83 +171,18 @@ class HMIWindow(QMainWindow):
         self.term_output = QPlainTextEdit()
         self.term_output.setReadOnly(True)
         self.term_output.setFont(QFont("Consolas", 12))
-        self.term_output.setStyleSheet("""
-            QPlainTextEdit {
-                background-color: #000000;
-                color: #FFD100;
-                border: 1px solid #00a651;
-                border-radius: 8px;
-            }
-        """)
+        self.term_output.setStyleSheet(styles.TERM_OUTPUT)
         self.term_output.setFixedHeight(80)
         self.term_output.setMaximumBlockCount(10)
 
-        
         status_layout.addWidget(self.term_output)
-        
 
         return self.status_bar
-        
-    def _run_jog_listener(self):
-        if self.jog_listener_process and self.jog_listener_process.poll() is None:
-            return  # already running
-        
-        self._kill_manual_init()
-        self._kill_encoder_teleop()
-        self.manual_init_running = False
-        self.encoder_running = False
-
-        if self.home_btn:
-            self._reset_mode_button(
-                self.home_btn,
-                HOME_LABEL,
-                HOME_SUB
-            )
-
-        if self.encoder_btn:
-            self._reset_mode_button(
-                self.encoder_btn,
-                ENCODER_LABEL,
-                ENCODER_SUB
-            )
-        cmd = "ros2 run test_py jog_listener_node"
-
-        self._print("Starting jog listener...")
-        self.jog_listener_process = self._launch_ros_process(cmd)
-        
-    
-    def _kill_jog_listener(self):
-        if not self.jog_listener_process:
-            return
-
-        if self.jog_listener_process.poll() is None:
-            self._print("Stopping jog listener...")
-            try:
-                cmd = ("pkill -9 -f jog_listener_node")
-
-                subprocess.Popen(
-                        ["bash", "-c", cmd],
-                        preexec_fn=os.setsid
-                    )
-            except Exception:
-                self.jog_listener_process.terminate()
-        
-        self._reset_mode_button(
-                self.manual_btn,
-                "Manual Control",
-                "MANUAL_JOG"
-            )
-        self.jog_listener_process = None
-    
-    def _reset_mode_button(self, btn, label, sub):
-        btn.label_widget.setText(label)
-        btn.sub_widget.setText(sub)
-        btn._set_inactive()
 
     def _build_mode_grid(self):
         grid = QGridLayout()
         grid.setSpacing(12)
-        
+
         callbacks = {
             "ENABLE_ROBOT": self._enable_robot,
             "HOME": self._run_manual_init,
@@ -320,10 +191,10 @@ class HMIWindow(QMainWindow):
         }
 
         modes = [
-            ("Encoder Teleop",  "XY workspace control",   "ENCODER_TELEOP", 0, 0),
-            ("Home Robot",      "Return to home pose",     "HOME",           0, 1),
-            ("Ship",           "Move to shipping position",   "SHIP_POSE",          1, 0),
-            ("Enable Robot",    "Start MoveIt stack",      "ENABLE_ROBOT",   1, 1),
+            ("Encoder Teleop", "XY workspace control", "ENCODER_TELEOP", 0, 0),
+            ("Home Robot", "Return to home pose", "HOME", 0, 1),
+            ("Ship", "Move to shipping position", "SHIP_POSE", 1, 0),
+            ("Enable Robot", "Start MoveIt stack", "ENABLE_ROBOT", 1, 1),
         ]
 
         for label, sub, key, row, col in modes:
@@ -353,35 +224,18 @@ class HMIWindow(QMainWindow):
         grid.addWidget(manual_btn, 2, 0, 1, 2)  # span both columns
 
         return grid
-        
-    def _launch_ros_process(
-        self,
-        command: str,
-        capture_output: bool = False
-    ):
-        kwargs = {
-            "preexec_fn": os.setsid
-        }
-
-        if capture_output:
-            kwargs.update({
-                "stdout": subprocess.PIPE,
-                "stderr": subprocess.STDOUT,
-                "text": True,
-                "bufsize": 1
-            })
-
-        return subprocess.Popen(
-            ["bash", "-c", command],
-            **kwargs
-        )
 
     def _build_estop_button(self):
         self.estop_btn = QPushButton("E-Stop")
         self.estop_btn.setFont(QFont("Arial", 18, QFont.Weight.Medium))
         self.estop_btn.setMinimumHeight(90)
-        self._setup_estop_button()
+        # Styling/wiring happens in EstopController, once it's constructed.
         return self.estop_btn
+
+    def _reset_mode_button(self, btn, label, sub):
+        btn.label_widget.setText(label)
+        btn.sub_widget.setText(sub)
+        btn._set_inactive()
 
     # =========================================================
     # Page navigation
@@ -411,23 +265,48 @@ class HMIWindow(QMainWindow):
 
     def _on_mode_changed(self, mode: str):
         self.current_mode = mode
-        #self.mode_label.setText(mode)
         for key, btn in self.mode_buttons.items():
             btn.set_active(key == mode)
 
     # =========================================================
-    # Process management
+    # Jog listener (used by the Manual Control page)
+    # =========================================================
+
+    def _run_jog_listener(self):
+        jl = self.procs.jog_listener_process
+        if jl and jl.poll() is None:
+            return  # already running
+
+        self.procs.kill_manual_init()
+        self.procs.kill_encoder_teleop()
+
+        if self.home_btn:
+            self._reset_mode_button(self.home_btn, HOME_LABEL, HOME_SUB)
+        if self.encoder_btn:
+            self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
+
+        cmd = "ros2 run test_py jog_listener_node"
+        self.procs.start_jog_listener(cmd)
+
+    def _kill_jog_listener(self):
+        if not self.procs.jog_listener_process:
+            return
+
+        self.procs.kill_jog_listener()
+        if self.manual_btn:
+            self._reset_mode_button(self.manual_btn, "Manual Control", "MANUAL_JOG")
+
+    # =========================================================
+    # Process-backed mode buttons
     # =========================================================
 
     def _enable_robot(self):
-        if self.robot_process is not None:
-            if self.robot_process.poll() is None:
-                self._print("Robot already running")
-                return
+        if self.procs.robot_process is not None and self.procs.robot_process.poll() is None:
+            self._print("Robot already running")
+            return
 
         self._print("Launching robot...")
         self.current_mode = 'ENABLING ROBOT'
-        #self.mode_label.setText(f"MODE: {self.current_mode}")
 
         self.enable_robot_btn.label_widget.setText("Starting")
         self.enable_robot_btn.sub_widget.setText("Launching MoveIt")
@@ -439,19 +318,11 @@ class HMIWindow(QMainWindow):
         )
 
         try:
-            self.robot_process = self._launch_ros_process(
-                cmd,
-                capture_output=True
-            )
-            self.log_thread = ProcessLogReader(self.robot_process)
-            self.log_thread.line_received.connect(self._log)
-            self.log_thread.start()
-            
-            self._print(f"Robot launch started PID={self.robot_process.pid}")
+            proc = self.procs.start_robot_stack(cmd)
+            self._print(f"Robot launch started PID={proc.pid}")
             self.enable_robot_btn.label_widget.setText("Robot Enabled")
             self.enable_robot_btn.sub_widget.setText("MoveIt Running")
             self.current_mode = 'IDLE'
-            #self.mode_label.setText(f"MODE: {self.current_mode}")
 
         except Exception as e:
             self._print(f"Launch failed: {e}")
@@ -460,38 +331,23 @@ class HMIWindow(QMainWindow):
 
     def _run_manual_init(self):
         # ── STOP if already running ──
-        if self.manual_init_running:
+        if self.procs.manual_init_running:
             self._print("Stopping manual init...")
-            self._kill_manual_init()
-            self._reset_mode_button(
-                self.home_btn,
-                HOME_LABEL,
-                HOME_SUB
-            )
-            self.manual_init_running = False
+            self.procs.kill_manual_init()
+            self._reset_mode_button(self.home_btn, HOME_LABEL, HOME_SUB)
             return
 
         # ── START ──
-        self._kill_encoder_teleop()
+        self.procs.kill_encoder_teleop()
         self._kill_jog_listener()
-        self.encoder_running = False
 
         if self.manual_btn:
-            self._reset_mode_button(
-                self.manual_btn,
-                "Manual Control",
-                "MANUAL_JOG"
-            )
-
+            self._reset_mode_button(self.manual_btn, "Manual Control", "MANUAL_JOG")
         if self.encoder_btn:
-            self._reset_mode_button(
-                self.encoder_btn,
-                ENCODER_LABEL,
-                ENCODER_SUB
-            )
+            self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
+
         self._print("Starting manual init...")
         self.current_mode = 'MANUAL INITIALIZATION'
-        #self.mode_label.setText(f"MODE: {self.current_mode}")
 
         self.home_btn.label_widget.setText("RUNNING")
         self.home_btn.sub_widget.setText(
@@ -504,83 +360,54 @@ class HMIWindow(QMainWindow):
             "source /home/fanuc/fanuc_ws/install/setup.bash && "
             "python3 /home/fanuc/fanuc_ws/src/test_py/test_py/manual_init.py"
         )
+        self.procs.start_manual_init(cmd)
 
-        self.manual_init_process = self._launch_ros_process(cmd)
-        self.manual_init_running = True
-    
     def _shipping_pos(self):
         self._print("Shipping position requested — stopping active modes...")
 
         # 1. Stop encoder teleop
-        if self.encoder_running:
-            self._kill_encoder_teleop()
-            self.encoder_running = False
+        if self.procs.encoder_running:
+            self.procs.kill_encoder_teleop()
 
         if self.encoder_btn:
-            self._reset_mode_button(
-                self.encoder_btn,
-                ENCODER_LABEL,
-                ENCODER_SUB
-            )
+            self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
 
         # 2. Stop manual init
-        if self.manual_init_running:
-            self._kill_manual_init()
-            self.manual_init_running = False
+        if self.procs.manual_init_running:
+            self.procs.kill_manual_init()
 
         if self.home_btn:
-            self._reset_mode_button(
-                self.home_btn,
-                HOME_LABEL,
-                HOME_SUB
-            )
+            self._reset_mode_button(self.home_btn, HOME_LABEL, HOME_SUB)
 
-        # 4. Reset mode state
+        # 3. Reset mode state
         self.current_mode = "SHIP"
         self._print("Publishing shipping position command...")
 
-        # 5. Publish ROS command
+        # 4. Publish ROS command
         self.ros.publish_ship_pose(True)
 
-        # 6. Optional: auto-reset bool so it's a clean trigger
+        # 5. Optional: auto-reset bool so it's a clean trigger
         QTimer.singleShot(300, lambda: self.ros.publish_ship_pose(False))
 
     def _run_encoder_teleop(self):
         # ── STOP if running ──
-        if self.encoder_running:
+        if self.procs.encoder_running:
             self._print("Stopping encoder teleop...")
-            self._kill_encoder_teleop()
-            self._reset_mode_button(
-                self.encoder_btn,
-                ENCODER_LABEL,
-                ENCODER_SUB
-            )
-            self.encoder_running = False
+            self.procs.kill_encoder_teleop()
+            self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
             return
 
         # ── START ──
-        self._kill_manual_init()
+        self.procs.kill_manual_init()
         self._kill_jog_listener()
-        self.manual_init_running = False
 
         if self.home_btn:
-            self._reset_mode_button(
-                self.home_btn,
-                HOME_LABEL,
-                HOME_SUB
-            )
-
+            self._reset_mode_button(self.home_btn, HOME_LABEL, HOME_SUB)
         if self.encoder_btn:
-            self._reset_mode_button(
-                self.encoder_btn,
-                ENCODER_LABEL,
-                ENCODER_SUB
-            )
-        
-        
+            self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
+
         self._print("Starting encoder teleop...")
         self.current_mode = 'ENCODER TELEOP'
-        #self.mode_label.setText(f"MODE: {self.current_mode}")
 
         self.encoder_btn.label_widget.setText("RUNNING")
         self.encoder_btn.sub_widget.setText(
@@ -594,236 +421,34 @@ class HMIWindow(QMainWindow):
             "ros2 run fanuc_crx_xy_demo encoder_test & "
             "ros2 run test_py servo_control "
         )
-
-        proc = self._launch_ros_process(cmd)
-        self.encoder_processes.append(proc)
-        self.encoder_running = True
-
-    # ── Kill helpers ──
-
-    def _terminate_process(self, proc):
-        if not proc:
-            return
-
-        if proc.poll() is not None:
-            return
-
-        try:
-            os.killpg(
-                os.getpgid(proc.pid),
-                signal.SIGTERM
-            )
-        except Exception:
-            proc.terminate()
-
-    def _kill_robot_stack(self):
-        if self.robot_process is not None:
-            if self.robot_process.poll() is None:
-                self._print("Killing robot stack...")
-                try:
-                    os.killpg(os.getpgid(self.robot_process.pid), signal.SIGTERM)
-                    #subprocess.run("pkill -f slider_gui_node", shell=True)
-                    cmd = (
-                        "pkill -9 -f slider_gui_node & "
-                        "pkill -9 -f servo_node & "
-                        "pkill -9 -f move_group"
-                    )
-
-                    subprocess.Popen(
-                        ["bash", "-c", cmd],
-                        preexec_fn=os.setsid
-                    )
-                    
-                    if self.log_thread:
-                        self.log_thread.stop()
-                        self.log_thread.wait()
-                        self.log_thread = None
-                
-                except Exception as e:
-                    self._print(f"SIGTERM failed: {e}")
-                    self.robot_process.terminate()
-            self.robot_process = None
-
-    def _kill_manual_init(self):
-        self._print("Killing manual init process...")
-        self._terminate_process(self.manual_init_process)
-        self.manual_init_process = None
-
-    def _kill_encoder_teleop(self):
-        self._print("Killing encoder teleop processes...")
-
-        for p in self.encoder_processes:
-            self._terminate_process(p)
-
-        self.encoder_processes = []
-        self.encoder_running = False
+        self.procs.start_encoder_teleop(cmd)
 
     # =========================================================
-    # E-STOP state machine
+    # E-STOP callbacks (invoked by EstopController)
     # =========================================================
 
-    def _estop(self):
-        self._print("E-STOP ACTIVATED")
-
+    def _on_estop_trigger(self):
         # If on jog page, return to main first so E-STOP button is visible
         self.stack.setCurrentIndex(PAGE_MAIN)
-
-        self.current_mode = 'ESTOPPED'
-        #self.mode_label.setText(f"MODE: {self.current_mode}")
-
         # Stop any jog command in flight
         self.ros.send_jog('stop')
 
-        self._kill_manual_init()
-        self._kill_encoder_teleop()
-        self.manual_init_running = False
-        self.encoder_running = False
-
-        self._reset_all_ui()
-
-        self.estop_btn.setText("⛔ HOLD 3s TO RESET")
-        self.estop_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #cc0000;
-                color: white;
-                border: 3px solid #ff0000;
-                border-radius: 12px;
-                font-size: 18px;
-            }
-        """)
-        self.estop_latched = True
-        self.estop_reset_ready = True
-
-    def _start_estop_hold(self):
-        if not self.estop_latched or not self.estop_reset_ready:
-            return
-        self.estop_hold_time = 0
-        self.estop_hold_timer.stop()
-        self.estop_hold_timer.start()
-
-    def _stop_estop_hold(self):
-        if not self.estop_latched:
-            return
-        self.estop_hold_timer.stop()
-        self.estop_hold_time = 0
-        if self.estop_latched:
-            self.estop_btn.setText("⛔ HOLD 3s TO RESET")
-
-    def _update_estop_hold(self):
-        if not self.estop_latched or not self.estop_reset_ready:
-            self.estop_hold_timer.stop()
-            return
-
-        self.estop_hold_time += 50
-        progress = min(self.estop_hold_time / self.estop_hold_required, 1.0)
-
-        bar = int(progress * 20)
-        self.estop_btn.setText(
-            "⛔ RESETTING [" + "*" * bar + "-" * (20 - bar) + "]"
-        )
-        self.estop_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: rgba(200, 0, 0, {0.5 + 0.5 * progress});
-                color: white;
-                border: 3px solid #ff0000;
-                border-radius: 12px;
-                font-size: 16px;
-            }}
-        """)
-
-        if self.estop_hold_time >= self.estop_hold_required:
-            self._release_estop()
-
-    def _release_estop(self):
-        self._print("E-STOP RELEASED")
-        self.current_mode = 'ESTOP RELEASED'
-        #self.mode_label.setText(f"MODE: {self.current_mode}")
-        self.estop_latched = False
-        self.estop_reset_ready = False
-        self.estop_hold_timer.stop()
-        self.estop_hold_time = 0
-        self._setup_estop_button()
-        self._print("System fully restored and reusable, please re-enable the robot")
-
-    def _setup_estop_button(self):
-        """Always restores E-STOP to its default functional state."""
-        try:
-            self.estop_btn.clicked.disconnect()
-        except Exception:
-            pass
-        try:
-            self.estop_btn.pressed.disconnect()
-        except Exception:
-            pass
-        try:
-            self.estop_btn.released.disconnect()
-        except Exception:
-            pass
-
-        self.estop_btn.clicked.connect(self._estop)
-        self.estop_btn.pressed.connect(self._start_estop_hold)
-        self.estop_btn.released.connect(self._stop_estop_hold)
-
-        self._reset_estop_style()
-        self.estop_btn.setText("⛔ E-STOP")
-        self.estop_btn.setDown(False)
-        self.estop_btn.setChecked(False)
-        self.estop_btn.blockSignals(False)
-
-    def _reset_estop_style(self):
-        self.estop_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2a0000;
-                color: #fc0808;
-                border: 2px solid #cc0000;
-                border-radius: 12px;
-            }
-            QPushButton:pressed {
-                background-color: #440000;
-            }
-        """)
-
-    # =========================================================
-    # UI reset after E-STOP
-    # =========================================================
+    def _on_estop_kill(self):
+        self.procs.kill_manual_init()
+        self.procs.kill_encoder_teleop()
 
     def _reset_all_ui(self):
-        """Restore all UI elements and internal states after E-STOP."""
-
+        """Restore all UI elements after E-STOP."""
         for key, btn in self.mode_buttons.items():
             btn.set_active(False)
         self.current_mode = "IDLE"
-        #self.mode_label.setText(f"MODE: {self.current_mode}")
 
-        self.encoder_running = False
-        self.encoder_processes = []
         if self.encoder_btn:
-            self._reset_mode_button(
-                self.encoder_btn,
-                ENCODER_LABEL,
-                ENCODER_SUB
-            )
-
-        self.manual_init_running = False
-        self.manual_init_process = None
-        
+            self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
         if self.home_btn:
-            self._reset_mode_button(
-                self.home_btn,
-                HOME_LABEL,
-                HOME_SUB
-            )
-
+            self._reset_mode_button(self.home_btn, HOME_LABEL, HOME_SUB)
         if self.enable_robot_btn:
-            self._reset_mode_button(
-                self.enable_robot_btn,
-                ENABLE_LABEL,
-                ENABLE_SUB
-            )
-    
-    def _print(self, *args, sep=" ", end="\n"):
-        msg = sep.join(str(a) for a in args)
-        self._log(msg)
+            self._reset_mode_button(self.enable_robot_btn, ENABLE_LABEL, ENABLE_SUB)
 
     # =========================================================
     # Window close
@@ -832,9 +457,7 @@ class HMIWindow(QMainWindow):
     def closeEvent(self, event):
         print("Closing HMI...")
         self.ros.send_jog('stop')
-        self._kill_robot_stack()
-        self._kill_manual_init()
-        self._kill_encoder_teleop()
+        self.procs.kill_all()
         try:
             self.ros.shutdown()
         except Exception as e:
