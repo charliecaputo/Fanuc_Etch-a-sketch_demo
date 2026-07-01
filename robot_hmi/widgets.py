@@ -39,28 +39,40 @@ class ModeButton(QPushButton):
         self.is_active = True
         self.setStyleSheet("""
             QPushButton {
-                background-color: #1a3a5a;
-                border: 2px solid #4a9fd5;
+                background-color: #00A651;
+                border: 2px solid #00A651;
                 border-radius: 12px;
             }
         """)
-        self.label_widget.setStyleSheet("color: #7ec8f0;")
-        self.sub_widget.setStyleSheet("color: #4a8ab0;")
+        self.label_widget.setStyleSheet("""
+            color: #ffffff;
+            background: 00A651;
+        """)
+        self.sub_widget.setStyleSheet("""
+            color: #ffffff;
+            background: 00A651;
+        """)
 
     def _set_inactive(self):
         self.is_active = False
         self.setStyleSheet("""
             QPushButton {
-                background-color: #1a1a2a;
-                border: 1px solid #2a2a4a;
+                background-color: #004d25;
+                border: 1px solid #004d25;
                 border-radius: 12px;
             }
             QPushButton:pressed {
-                background-color: #252535;
+                background-color: #03ff7c;
             }
         """)
-        self.label_widget.setStyleSheet("color: #8888aa;")
-        self.sub_widget.setStyleSheet("color: #444466;")
+        self.label_widget.setStyleSheet("""
+            color: #ffffff;
+            background: 004d25;
+        """)
+        self.sub_widget.setStyleSheet("""
+            color: #ffffff;
+            background: 004d25;
+        """)
 
     def set_active(self, active: bool):
         if active:

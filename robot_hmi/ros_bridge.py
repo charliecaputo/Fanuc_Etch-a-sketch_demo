@@ -7,7 +7,7 @@
 
 import threading
 import rclpy
-from std_msgs.msg import String, Float64, Float32
+from std_msgs.msg import String, Float64, Float32, Bool
 from moveit_msgs.srv import ServoCommandType
 
 from PyQt6.QtCore import pyqtSignal, QObject
@@ -27,13 +27,10 @@ class ROSBridge(QObject):
         self.node = rclpy.create_node('hmi_node')
 
         # ── Mode pub/sub ──
-        self.mode_pub = self.node.create_publisher(
-            String, '/hmi/mode_command', 10
+        self.ship_pose_pub = self.node.create_publisher(
+            Bool, "/ship_pose", 10
         )
-        self.node.create_subscription(
-            String, '/hmi/current_mode', self._mode_cb, 10
-        )
-
+        
         # ── Jog direction publisher ──
         # Publishes a string like "+x", "-y", "+z", "stop"
         self.jog_pub = self.node.create_publisher(
@@ -108,6 +105,10 @@ class ROSBridge(QObject):
             self.speed_pub.publish(msg)
         except Exception as e:
             print(f"Speed publish failed (ignored): {e}")
+    def publish_ship_pose(self, value: bool = True):
+        msg = Bool()
+        msg.data = value
+        self.ship_pose_pub.publish(msg)
 
     def shutdown(self):
         if not self.alive:

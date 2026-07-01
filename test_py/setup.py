@@ -41,6 +41,7 @@ setup(
             'servo_control = test_py.servo_control:main',
             'jog_listener_node = test_py.jog_listener_node:main',
             'encoder_read = test_py.encoder_read:main',
+            'ship_pos = test_py.ship_pos:main',
         ],
     },
 )

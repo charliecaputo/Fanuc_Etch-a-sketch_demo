@@ -188,17 +188,17 @@ def launch_setup(context, *args, **kwargs):
     nodes_to_launch.append(servo_node)
     
     
-#    jog_listener_node = Node(
-#        package="test_py",
-#        executable="jog_listener_node",
-#        parameters=[
-#            moveit_config.to_dict(),
-#            servo_config_file,
-#            {"use_sim_time": False},
-#        ],
-#    )
+    shipping_position_node = Node(
+        package="test_py",
+        executable="ship_pos",
+        parameters=[
+            moveit_config.to_dict(),
+            servo_config_file,
+            {"use_sim_time": False},
+        ],
+    )
     
-#    nodes_to_launch.append(jog_listener_node)
+    nodes_to_launch.append(shipping_position_node)
     # ------------------------------------------------------------------
     # RViz
     # ------------------------------------------------------------------

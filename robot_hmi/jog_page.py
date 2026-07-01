@@ -27,7 +27,7 @@ class JogPage(QWidget):
         self.back_callback = back_callback
         
         self._initializing_slider = True
-        self.setStyleSheet("background-color: #111111;")
+        self.setStyleSheet("background-color: #000000;")
         self._build_ui()
 
     # =========================================================
@@ -49,39 +49,39 @@ class JogPage(QWidget):
         back_btn = QPushButton("← Back")
         back_btn.setFixedHeight(44)
         back_btn.setFixedWidth(110)
-        back_btn.setFont(QFont("Arial", 11))
+        back_btn.setFont(QFont("Arial", 14))
         back_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1a1a2a;
-                color: #8888aa;
-                border: 1px solid #2a2a4a;
+                background-color: #696868;
+                color: #ffffff;
+                border: 1px solid #a8a8a8;
                 border-radius: 8px;
             }
             QPushButton:pressed {
-                background-color: #252535;
+                background-color: #a8a8a8;
             }
         """)
         back_btn.clicked.connect(self._on_back)
 
         title = QLabel("Manual Jog (Cartesian)")
-        title.setFont(QFont("Arial", 16, QFont.Weight.Medium))
-        title.setStyleSheet("color: #cccccc;")
+        title.setFont(QFont("Arial", 20, QFont.Weight.Medium))
+        title.setStyleSheet("color: #ffffff;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # NEW: switch button
         switch_btn = QPushButton("Joint →")
         switch_btn.setFixedHeight(44)
         switch_btn.setFixedWidth(110)
-        switch_btn.setFont(QFont("Arial", 11))
+        switch_btn.setFont(QFont("Arial", 14))
         switch_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1a1a2a;
-                color: #7ec8f0;
-                border: 1px solid #2a2a4a;
+                background-color: #696969;
+                color: #ffffff;
+                border: 1px solid #a8a8a8;
                 border-radius: 8px;
             }
             QPushButton:pressed {
-                background-color: #252535;
+                background-color: #a8a8a8;
             }
         """)
         switch_btn.clicked.connect(self._on_switch_mode)
@@ -105,21 +105,21 @@ class JogPage(QWidget):
 
         title = QLabel("Translation")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color:#cccccc;")
-        title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+        title.setStyleSheet("color:#ffffff;")
+        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         trans.addWidget(title)
 
         trans_grid = QGridLayout()
         trans_grid.setSpacing(10)
 
-        trans_grid.addWidget(self._jog_btn("+X", "+x", "#1a3a5a", "#4a9fd5"), 0, 0)
-        trans_grid.addWidget(self._jog_btn("-X", "-x", "#1a3a5a", "#4a9fd5"), 1, 0)
+        trans_grid.addWidget(self._jog_btn("+X", "+x", "#004d25", "#ffffff"), 0, 0)
+        trans_grid.addWidget(self._jog_btn("-X", "-x", "#004d25", "#ffffff"), 1, 0)
 
-        trans_grid.addWidget(self._jog_btn("+Y", "+y", "#1a3a5a", "#4a9fd5"), 0, 1)
-        trans_grid.addWidget(self._jog_btn("-Y", "-y", "#1a3a5a", "#4a9fd5"), 1, 1)
+        trans_grid.addWidget(self._jog_btn("+Y", "+y", "#004d25", "#ffffff"), 0, 1)
+        trans_grid.addWidget(self._jog_btn("-Y", "-y", "#004d25", "#ffffff"), 1, 1)
 
-        trans_grid.addWidget(self._jog_btn("+Z", "+z", "#1a3a5a", "#4a9fd5"), 0, 2)
-        trans_grid.addWidget(self._jog_btn("-Z", "-z", "#1a3a5a", "#4a9fd5"), 1, 2)
+        trans_grid.addWidget(self._jog_btn("+Z", "+z", "#004d25", "#ffffff"), 0, 2)
+        trans_grid.addWidget(self._jog_btn("-Z", "-z", "#004d25", "#ffffff"), 1, 2)
 
         trans.addLayout(trans_grid)
 
@@ -130,21 +130,21 @@ class JogPage(QWidget):
 
         title = QLabel("Rotation")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color:#cccccc;")
-        title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+        title.setStyleSheet("color:#ffffff;")
+        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         rot.addWidget(title)
 
         rot_grid = QGridLayout()
         rot_grid.setSpacing(10)
 
-        rot_grid.addWidget(self._jog_btn("+Roll", "+roll", "#3a1a1a", "#d57a4a"), 0, 0)
-        rot_grid.addWidget(self._jog_btn("-Roll", "-roll", "#3a1a1a", "#d57a4a"), 1, 0)
+        rot_grid.addWidget(self._jog_btn("+Roll", "+roll", "#004d25", "#ffffff"), 0, 0)
+        rot_grid.addWidget(self._jog_btn("-Roll", "-roll", "#004d25", "#ffffff"), 1, 0)
 
-        rot_grid.addWidget(self._jog_btn("+Pitch", "+pitch", "#3a1a1a", "#d57a4a"), 0, 1)
-        rot_grid.addWidget(self._jog_btn("-Pitch", "-pitch", "#3a1a1a", "#d57a4a"), 1, 1)
+        rot_grid.addWidget(self._jog_btn("+Pitch", "+pitch", "#004d25", "#ffffff"), 0, 1)
+        rot_grid.addWidget(self._jog_btn("-Pitch", "-pitch", "#004d25", "#ffffff"), 1, 1)
 
-        rot_grid.addWidget(self._jog_btn("+Yaw", "+yaw", "#3a1a1a", "#d57a4a"), 0, 2)
-        rot_grid.addWidget(self._jog_btn("-Yaw", "-yaw", "#3a1a1a", "#d57a4a"), 1, 2)
+        rot_grid.addWidget(self._jog_btn("+Yaw", "+yaw", "#004d25", "#ffffff"), 0, 2)
+        rot_grid.addWidget(self._jog_btn("-Yaw", "-yaw", "#004d25", "#ffffff"), 1, 2)
 
         rot.addLayout(rot_grid)
 
@@ -161,12 +161,12 @@ class JogPage(QWidget):
         btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {bg};
-                color: #7ec8f0;
+                color: #ffffff;
                 border: 2px solid {border};
                 border-radius: 12px;
             }}
             QPushButton:pressed {{
-                background-color: #254a6a;
+                background-color: #00A651;
             }}
         """)
         btn.pressed.connect(lambda d=direction: self.ros.send_jog(d))
@@ -176,7 +176,7 @@ class JogPage(QWidget):
     def _build_speed_slider(self):
         container = QWidget()
         container.setStyleSheet(
-            "background: #1a1a2a; border: 1px solid #2a2a4a; border-radius: 5px;"
+            "background: #9c0e24; border: 2px solid #FFD100; border-radius: 5px;"
         )
 
         layout = QVBoxLayout(container)
@@ -188,12 +188,12 @@ class JogPage(QWidget):
 
         self.speed_label = QLabel(f"Speed: {speed_percent}%")
         self.speed_label.setFont(QFont("Arial", 16, QFont.Weight.Medium))
-        self.speed_label.setStyleSheet("color: #7ec8f0;")
+        self.speed_label.setStyleSheet("color: #FFD100;")
         self.speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.speed_label.setFixedHeight(60)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setFixedHeight(60)
+        self.slider.setFixedHeight(100)
         self.slider.setMinimum(0)
         self.slider.setMaximum(100)
         self.slider.setValue(speed_percent)
@@ -202,20 +202,20 @@ class JogPage(QWidget):
         self.slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.slider.setStyleSheet("""
             QSlider::groove:horizontal {
-                height: 16px;
-                background: #2a2a4a;
+                height: 24px;
+                background: #876f00;
                 border-radius: 4px;
             }
             QSlider::handle:horizontal {
-                background: #4a9fd5;
-                border: 2px solid #7ec8f0;
-                width: 12px;
-                height: 32px;
+                background: #ffffff;
+                border: 2px solid #a8a8a8;
+                width: 48px;
+                height: 48px;
                 margin: -10px;
                 border-radius: 14px;
             }
             QSlider::sub-page:horizontal {
-                background: #1a3a5a;
+                background: #FFD100;
                 border-radius: 4px;
             }
         """)
