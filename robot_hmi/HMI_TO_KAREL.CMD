@@ -1,0 +1,6 @@
+1|SET_MANUAL|enabled=1,state=MANUAL_JOGGING
+2|SET_MANUAL|enabled=0,state=AUTO_IDLE
+3|SET_MANUAL|enabled=1,state=MANUAL_JOGGING
+4|SET_MANUAL|enabled=0,state=AUTO_IDLE
+5|START|mode=AUTO,state=AUTO_RUNNING,speed=100
+6|ABORT|state=AUTO_ABORTED
