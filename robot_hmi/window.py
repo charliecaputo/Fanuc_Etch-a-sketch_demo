@@ -98,7 +98,7 @@ class HMIWindow(QMainWindow):
 
         # Show window (can be swapped to fullscreen if needed)
         self.show()
-        # self.showFullScreen()
+        #self.showFullScreen()
 
         # Build UI hierarchy
         self._build_ui()
@@ -484,7 +484,7 @@ class HMIWindow(QMainWindow):
         cmd = (
             "source /opt/ros/jazzy/setup.bash && "
             "source /home/fanuc/fanuc_ws/install/setup.bash && "
-            "ros2 run fanuc_crx_xy_demo encoder_test & "
+            "ros2 run test_py encoder_read --ros-args --params-file ~/fanuc_ws/src/test_py/config/demo_params.yaml & "
             "ros2 run test_py servo_control "
         )
         self.procs.start_encoder_teleop(cmd)

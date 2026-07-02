@@ -30,10 +30,9 @@ The HMI should pop up at this point\
 2. Home Robot: Homes the robot 
 3. Encoder Teleop: The current functional code. Uses keyboard for y axis and encoder for x axis (still waiting on second encoder)
 4. Ship: Moves the robot in and out of the shipping position based on its current location (joint states).
-5. E-Stop: Shuts down everything but the app. I am debating on getting rid of the abort button and just making this kill everything but the launch file. The estop latches and to reset it you must hold it down for 3 seconds.
-6. "X" in corner: Same as estop but also shuts down the app
+5. E-Stop: Kills all running codes except the launch file
+6. "X" in corner: Same as estop but also shuts down the app and launch file
 7. \"-" next to x: Minimizes the page
-
 8. Manual Control: This takes you to the cartesian jog page
 
 > **Note:** Codes should shutdown when another is launched. i.e. if you click the "Encoder Teleop" while "Home Robot" is already running, "Home Robot" will shutdown and vice versa. This also includes when you switch to and from manual control as manual control has its own code. 
