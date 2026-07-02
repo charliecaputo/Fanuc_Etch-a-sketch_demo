@@ -1,5 +1,26 @@
 #!/usr/bin/env python3
 
+# ─────────────────────────────────────────────
+# jog_listener.py
+#
+# ROS2 MoveIt Servo jog controller node.
+#
+# Responsibilities:
+#   • Receive jog commands from HMI (/hmi/jog_command)
+#   • Receive speed scaling from UI (/hmi/jog_speed)
+#   • Switch between Cartesian (twist) and joint jogging modes
+#   • Convert UI commands into MoveIt Servo messages
+#   • Publish TwistStamped and JointJog commands
+#   • Enforce basic safety limits (e.g., minimum Z height)
+#   • Maintain continuous motion via periodic update loop
+#
+# NOTE:
+#   • Servo mode switching is handled via ServoCommandType service
+#   • TF2 is used only for tool position monitoring (safety check)
+#   • Cartesian and joint modes are mutually exclusive
+#   • This node assumes MoveIt Servo is running and configured
+# ─────────────────────────────────────────────
+
 import rclpy
 from rclpy.node import Node
 

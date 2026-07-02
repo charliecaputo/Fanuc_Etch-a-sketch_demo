@@ -1,3 +1,23 @@
+# ─────────────────────────────────────────────
+# manual_init.py
+#
+# Robot startup pose initializer using MoveIt IK.
+#
+# Responsibilities:
+#   • Wait for valid /joint_states input
+#   • Query MoveIt IK service (/compute_ik)
+#   • Compute a valid joint configuration for a fixed Cartesian pose
+#   • Convert IK result into a JointTrajectory command
+#   • Move robot safely to a predefined start pose
+#
+# NOTE:
+#   • Uses MoveIt GetPositionIK service for inverse kinematics
+#   • Requires a valid planning group ("manipulator")
+#   • Assumes end-effector link is "flange"
+#   • Publishes directly to joint_trajectory_controller
+#   • Intended for system initialization only (run once at startup)
+# ─────────────────────────────────────────────
+
 import rclpy
 from rclpy.node import Node
 

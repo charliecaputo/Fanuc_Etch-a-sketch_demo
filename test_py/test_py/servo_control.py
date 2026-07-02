@@ -1,3 +1,24 @@
+# ─────────────────────────────────────────────
+# servo_control.py
+#
+# ROS2 MoveIt Servo encoder-based Cartesian controller.
+#
+# Responsibilities:
+#   • Convert encoder values into workspace targets
+#   • Track end-effector pose via TF2
+#   • Compute Cartesian error (x/y) to target position
+#   • Apply proportional control (P-controller)
+#   • Publish TwistStamped commands to MoveIt Servo
+#   • Support keyboard-assisted secondary encoder axis control
+#   • Maintain continuous low-latency control loop
+#
+# NOTE:
+#   • Uses MoveIt Servo switch_command_type service for activation
+#   • Assumes base_link → tool_link TF is available
+#   • Encoder values are mapped into a fixed workspace region
+#   • Designed for real-time closed-loop Cartesian control
+# ─────────────────────────────────────────────
+
 #!/usr/bin/env python3
 
 import rclpy

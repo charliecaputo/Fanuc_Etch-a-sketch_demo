@@ -1,3 +1,25 @@
+# ─────────────────────────────────────────────
+# cartesian_start_initializer.py
+#
+# MoveIt IK-based multi-waypoint initializer for shipping pose transitions.
+#
+# Responsibilities:
+#   • Monitor /joint_states to detect robot configuration
+#   • Determine whether robot is in "shipping pose"
+#   • Listen for /ship_pose trigger to start motion sequence
+#   • Compute IK for a sequence of Cartesian waypoints
+#   • Chain IK solutions into a continuous joint trajectory
+#   • Publish trajectory to joint_trajectory_controller
+#   • Track and publish shipping state via /in_ship_pose
+#
+# NOTE:
+#   • Uses MoveIt GetPositionIK service for waypoint planning
+#   • Waypoints define a structured motion path for entering/leaving shipping pose
+#   • Motion direction is automatically reversed depending on current pose
+#   • Assumes 6-DOF manipulator with "manipulator" planning group
+#   • Designed for safe staged motion rather than single-point IK
+# ─────────────────────────────────────────────
+
 import rclpy
 from rclpy.node import Node
 
@@ -42,6 +64,12 @@ class CartesianStartInitializer(Node):
             JointState,
             '/joint_states',
             self.joint_state_cb,
+            10
+        )
+        
+        self.ship_state_pub = self.create_publisher(
+            Bool,
+            "/in_ship_pose",
             10
         )
         
@@ -101,18 +129,23 @@ class CartesianStartInitializer(Node):
     def joint_state_cb(self, msg: JointState):
         self.latest_joint_state = msg
         self.joint_state_received = True
+        if not hasattr(self, "_published_initial_state"):
+            self.publish_ship_state(
+                self.is_at_shipping_pose(msg.position)
+            )
+            self._published_initial_state = True
         
     def ship_pose_cb(self, msg: Bool):
-        # Ignore False messages
+        # Ignore False messages (only rising edge triggers motion)
         if not msg.data:
             return
 
-        # Ignore if already executing
+        # Prevent re-entry while motion is executing
         if self.busy:
             self.get_logger().warn("Already executing shipping motion.")
             return
 
-        # Need a joint state before planning
+        # Require joint state before planning IK
         if not self.joint_state_received:
             self.get_logger().warn("No joint state received yet.")
             return
@@ -124,6 +157,7 @@ class CartesianStartInitializer(Node):
 
         current_positions = self.latest_joint_state.position
 
+        # Decide direction based on current pose
         if self.is_at_shipping_pose(current_positions):
             self.get_logger().info("Leaving shipping position.")
             self.waypoints = list(reversed(self.shipping_waypoints))
@@ -149,6 +183,7 @@ class CartesianStartInitializer(Node):
 
     # =========================================================
     # START
+    # (legacy entry path, currently unused but kept for reference)
     # =========================================================
     def start_init(self):
         if self.done:
@@ -163,7 +198,8 @@ class CartesianStartInitializer(Node):
         current_positions = self.latest_joint_state.position
 
         at_shipping = self.is_at_shipping_pose(current_positions)
-
+        self.publish_ship_state(at_shipping)
+        
         if at_shipping:
             self.get_logger().info("Robot at shipping pose → LEAVING shipping position")
             self.direction = -1
@@ -279,15 +315,24 @@ class CartesianStartInitializer(Node):
             pt = JointTrajectoryPoint()
             pt.positions = positions
             
-            # simple timing: 2 seconds per waypoint
+            # simple timing: 3 seconds per waypoint
             pt.time_from_start.sec = (i + 1) * 3
 
             traj.points.append(pt)
 
         self.traj_pub.publish(traj)
-
+        
+        # Update state
+        in_shipping = (self.waypoints == self.shipping_waypoints)
+        self.publish_ship_state(in_shipping)
+        
         self.get_logger().info("Initialization trajectory published.")
         self.busy = False
+        
+    def publish_ship_state(self, in_shipping: bool):
+        msg = Bool()
+        msg.data = in_shipping
+        self.ship_state_pub.publish(msg)
 
 
 # =========================================================
