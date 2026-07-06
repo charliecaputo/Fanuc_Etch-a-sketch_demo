@@ -112,14 +112,6 @@ class JogListener(Node):
             '/servo_node/switch_command_type'
         )
 
-#        if client.wait_for_service(timeout_sec=5.0):
-#            req = ServoCommandType.Request()
-#            req.command_type = 0  # TWIST mode
-#            client.call_async(req)
-#            self.get_logger().info("Servo command type set to TWIST")
-#        else:
-#            self.get_logger().warn("Servo service not available")
-
     def set_servo_mode(self, mode):
         if self.current_mode == mode:
             return

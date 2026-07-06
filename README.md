@@ -40,12 +40,19 @@ The HMI should pop up at this point\
 **Buttons (Cartesian Jog Page):**
 1. Back: Takes you to Main Page
 2. Joint: Takes you to the Joint jog page
-3. 12 buttons in the middle: Jogs the robot in the respective cartesian coordinate.
-4. Slider at the bottom: Controls the speed as a percentage
+3. Free Drive: Takes you to Free Drive page. 
+4. 12 buttons in the middle: Jogs the robot in the respective cartesian coordinate.
+5. Slider at the bottom: Controls the speed as a percentage
 
 **Buttons (Joint Jog Page):**
 1. Back: Takes you to Main Page 
 2. Cartesian: Takes you to the Cartesian jog page
-3. 12 buttons in the middle: Jogs the robot in the respective joint coordinate.
-4. Slider at the bottom: Controls the speed as a percentage.
+3. Free Drive: Takes you to Free Drive page. This function is untested on the real robot. It works by letting user press and hold the button which raises Flag 8. Make sure to enable the "Enabling Input" in the collaborative settings of the robot. When released the button is released Manual Guided Teaching is disabled.
+4. 12 buttons in the middle: Jogs the robot in the respective joint coordinate.
+5. Slider at the bottom: Controls the speed as a percentage.
 > **Note:** Speed carries between the jog pages and does NOT reset unless app is restarted. Does NOT affect codes run from main page.
+
+**Buttons (Joint Jog Page):**
+1. Back: Takes you to Main Page
+2. Hold For Free Drive: Self explanatory. Hold it down and the robot should go into freedive.
+>**Note:** This function is untested on the real robot. It works by letting user press and hold the button which raises Flag 8. Make sure to enable the "Enabling Input" in the collaborative settings of the robot. When the button is released Manual Guided Teaching is disabled.

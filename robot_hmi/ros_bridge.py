@@ -20,14 +20,13 @@ import threading
 import rclpy
 from std_msgs.msg import String, Float64, Float32, Bool
 from moveit_msgs.srv import ServoCommandType
-
+from fanuc_msgs.msg import IOCmd, BoolIO
 from PyQt6.QtCore import pyqtSignal, QObject
 
 
 class ROSBridge(QObject):
     """
     Qt-safe wrapper around a ROS2 node.
-
     This class ensures:
         • ROS callbacks never directly touch UI widgets
         • Communication is thread-safe via Qt signals
@@ -68,6 +67,12 @@ class ROSBridge(QObject):
         self.speed_pub = self.node.create_publisher(
             Float32, '/hmi/jog_speed', 10
         )
+        
+        self.io_cmd_pub = self.node.create_publisher(
+            IOCmd,
+            "/fanuc_gpio_controller/io_cmd",
+            10
+        )
 
         # =========================================================
         # Subscribers
@@ -77,7 +82,11 @@ class ROSBridge(QObject):
         self.ship_state_sub = self.node.create_subscription(
             Bool, "/in_ship_pose", self.ship_state_cb, 10
         )
-
+        
+        
+        self._last_flag_value = None
+        self._flag_lock = threading.Lock()
+        
         # Internal state
         self.in_ship_pose = None
         self.speed = 0.5
@@ -102,7 +111,6 @@ class ROSBridge(QObject):
     def _activate_servo(self):
         """
         Switch MoveIt Servo into correct command mode.
-
         Runs in a background thread so UI is never blocked.
         """
         def _do():
@@ -142,7 +150,6 @@ class ROSBridge(QObject):
     def send_jog(self, direction: str):
         """
         Publish jog command.
-
         Valid values:
             '+x', '-x', '+y', '-y', '+z', '-z', 'stop'
         """
@@ -159,7 +166,6 @@ class ROSBridge(QObject):
     def send_speed(self, value):
         """
         Publish speed scaling factor.
-
         Args:
             value (float): expected range [0.0, 1.0]
         """
@@ -189,21 +195,30 @@ class ROSBridge(QObject):
     def ship_state_cb(self, msg):
         """
         Callback for /in_ship_pose topic.
-
         Updates internal state and notifies UI via signal.
         """
         self.in_ship_pose = msg.data
         self.ship_state_changed.emit(msg.data)
+        
+    def set_flag(self, flag_number: int, value: bool):
 
-    def _mode_cb(self, msg):
-        """
-        (Unused in current snippet)
-        Would handle mode updates and connection state.
-        """
-        self._connected = True
-        self.connection_changed.emit(True)
-        self.mode_changed.emit(msg.data)
+        msg = IOCmd()
 
+        io = BoolIO()
+
+        io.io_type.type = "F"     # Digital Output
+        io.index = flag_number     # e.g. 101
+        io.value = value
+
+        msg.values = [io]
+
+        self.node.get_logger().info(
+            f"[IO_CMD] DO{flag_number} = {value}"
+        )
+
+        self.io_cmd_pub.publish(msg)
+    
+    
     # =========================================================
     # Shutdown
     # =========================================================

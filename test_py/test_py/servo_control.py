@@ -62,11 +62,11 @@ class EncoderServo(Node):
         # =====================================================
         # Workspace
         # =====================================================
-        self.WS_X_MIN = 0.39
-        self.WS_X_MAX = 0.66
+        self.WS_X_MIN = 0.42
+        self.WS_X_MAX = 0.68
 
-        self.WS_Y_MIN = -0.23
-        self.WS_Y_MAX = 0.34
+        self.WS_Y_MIN = -0.285
+        self.WS_Y_MAX = 0.285
 
         # Precompute scaling
         self.ws_x_range = self.WS_X_MAX - self.WS_X_MIN

@@ -28,7 +28,7 @@ class ModeButton(QPushButton):
         • Inactive → default dark theme
 
     Intended usage:
-        Mode selection panels (e.g., Jog, Auto, Teach, etc.)
+        Mode selection panels (e.g., Jog, Ship program, Program start, Home program, etc.)
     """
 
     def __init__(self, label, sublabel, mode_key):

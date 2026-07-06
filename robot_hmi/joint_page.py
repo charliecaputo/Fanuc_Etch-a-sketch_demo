@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────
 # joint_page.py
 #
-# Manual joint-space jogging UI for a robot arm.
+# Manual joint-space jogging UI for the robot arm.
 #
 # This page provides:
 #   • Individual joint control (J1–J6)
@@ -96,6 +96,24 @@ class JointPage(QWidget):
         """)
         back_btn.clicked.connect(self._on_back)
 
+        # Free Drive navigation button (placed between the page-change buttons)
+        freedrive_btn = QPushButton("Free Drive")
+        freedrive_btn.setFixedHeight(44)
+        freedrive_btn.setFixedWidth(120)
+        freedrive_btn.setFont(QFont("Arial", 14))
+        freedrive_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #696868;
+                color: #ffffff;
+                border: 1px solid #a8a8a8;
+                border-radius: 8px;
+            }
+            QPushButton:pressed {
+                background-color: #a8a8a8;
+            }
+        """)
+        freedrive_btn.clicked.connect(self._on_freedrive)
+
         # Title
         title = QLabel("Manual Jog (Joint)")
         title.setFont(QFont("Arial", 20, QFont.Weight.Medium))
@@ -134,6 +152,7 @@ class JointPage(QWidget):
 
         # Layout arrangement
         row.addWidget(back_btn)
+        row.addWidget(freedrive_btn)
         row.addWidget(switch_btn)
         row.addStretch()
         row.addWidget(title)
@@ -303,6 +322,11 @@ class JointPage(QWidget):
         """Switch from joint mode to Cartesian mode."""
         self.ros.send_jog('stop')
         self.back_callback("cartesian")
+
+    def _on_freedrive(self):
+        """Navigate to the Free Drive (manual guided motion) page."""
+        self.ros.send_jog('stop')
+        self.back_callback("freedrive")
 
     def _on_speed(self, v):
         """Update speed scaling from slider."""

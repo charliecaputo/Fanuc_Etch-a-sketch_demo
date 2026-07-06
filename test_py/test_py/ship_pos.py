@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────
-# cartesian_start_initializer.py
+# ship_pos.py
 #
 # MoveIt IK-based multi-waypoint initializer for shipping pose transitions.
 #
@@ -111,7 +111,6 @@ class CartesianStartInitializer(Node):
         self.seed_state = None
         self.done = False
 
-        #self.create_timer(2.0, self.start_init)
         self.create_subscription(
             Bool,
             "/ship_pose",
@@ -180,47 +179,6 @@ class CartesianStartInitializer(Node):
                 return False
 
         return True
-
-    # =========================================================
-    # START
-    # (legacy entry path, currently unused but kept for reference)
-    # =========================================================
-    def start_init(self):
-        if self.done:
-            return
-
-        if not self.joint_state_received:
-            self.get_logger().info("Waiting for /joint_states...")
-            return
-
-        self.done = True
-
-        current_positions = self.latest_joint_state.position
-
-        at_shipping = self.is_at_shipping_pose(current_positions)
-        self.publish_ship_state(at_shipping)
-        
-        if at_shipping:
-            self.get_logger().info("Robot at shipping pose → LEAVING shipping position")
-            self.direction = -1
-        else:
-            self.get_logger().info("Robot NOT at shipping pose → ENTERING shipping position")
-            self.direction = 1
-
-        # Set waypoint order based on direction
-        if self.direction == 1:
-            self.waypoints = self.waypoints
-        else:
-            self.waypoints = list(reversed(self.waypoints))
-        
-        print(self.waypoints)
-        self.current_waypoint = 0
-        self.joint_solutions = []
-
-        self.seed_state = RobotState()
-        self.seed_state.joint_state = self.latest_joint_state
-
-        self.solve_next_waypoint()
 
     # =========================================================
     # SOLVE ONE WAYPOINT

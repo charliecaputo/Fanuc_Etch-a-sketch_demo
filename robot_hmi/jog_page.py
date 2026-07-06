@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────
 # jog_page.py
 #
-# Manual Cartesian jogging UI for a robot arm.
+# Manual Cartesian jogging UI for the robot arm.
 #
 # This page provides:
 #   • 6-DOF Cartesian jog controls (X/Y/Z + Roll/Pitch/Yaw)
@@ -23,7 +23,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
-from std_msgs.msg import Float32  # (unused here, likely legacy or future use)
 import styles
 
 
@@ -97,6 +96,24 @@ class JogPage(QWidget):
         """)
         back_btn.clicked.connect(self._on_back)
 
+        # Free Drive navigation button (placed between the page-change buttons)
+        freedrive_btn = QPushButton("Free Drive")
+        freedrive_btn.setFixedHeight(44)
+        freedrive_btn.setFixedWidth(120)
+        freedrive_btn.setFont(QFont("Arial", 14))
+        freedrive_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #696868;
+                color: #ffffff;
+                border: 1px solid #a8a8a8;
+                border-radius: 8px;
+            }
+            QPushButton:pressed {
+                background-color: #a8a8a8;
+            }
+        """)
+        freedrive_btn.clicked.connect(self._on_freedrive)
+
         # Page title
         title = QLabel("Manual Jog (Cartesian)")
         title.setFont(QFont("Arial", 20, QFont.Weight.Medium))
@@ -135,6 +152,7 @@ class JogPage(QWidget):
 
         # Layout arrangement
         row.addWidget(back_btn)
+        row.addWidget(freedrive_btn)
         row.addWidget(switch_btn)
         row.addStretch()
         row.addWidget(title)
@@ -347,3 +365,8 @@ class JogPage(QWidget):
         """Switch from Cartesian jog page to joint jog page."""
         self.ros.send_jog('stop')
         self.back_callback("joint")
+
+    def _on_freedrive(self):
+        """Navigate to the Free Drive (manual guided motion) page."""
+        self.ros.send_jog('stop')
+        self.back_callback("freedrive")

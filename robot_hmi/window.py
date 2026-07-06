@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-
 # ─────────────────────────────────────────────
-# jog_listener.py
+# window.py
 #
-# ROS2 MoveIt Servo jog controller node.
+# ROS2 + PyQt6 robot HMI main window.
 #
 # Responsibilities:
-#   • Receive jog commands from HMI (/hmi/jog_command)
-#   • Receive speed scaling from UI (/hmi/jog_speed)
-#   • Switch between Cartesian (twist) and joint jogging modes
-#   • Convert UI commands into MoveIt Servo messages
-#   • Publish TwistStamped and JointJog commands
-#   • Enforce basic safety limits (e.g., minimum Z height)
-#   • Maintain continuous motion via periodic update loop
+#   • Provide main GUI for robot control
+#   • Manage stacked UI pages (Home, Jog, Joint)
+#   • Launch and monitor ROS2 processes (MoveIt, teleop, servo, etc.)
+#   • Handle mode switching (Home, Encoder Teleop, Manual, Ship, Enable)
+#   • Interface with ROSBridge for command + state exchange
+#   • Integrate jog_listener node lifecycle management
+#   • Coordinate safety systems (E-stop, ship pose lockout)
+#   • Enable/disable controls based on robot state
+#   • Log system output to terminal widget
 #
 # NOTE:
-#   • Servo mode switching is handled via ServoCommandType service
-#   • TF2 is used only for tool position monitoring (safety check)
-#   • Cartesian and joint modes are mutually exclusive
-#   • This node assumes MoveIt Servo is running and configured
+#   • This UI assumes a running ROS2 environment (Jazzy or compatible)
+#   • ProcessManager is responsible for all subprocess lifecycle control
+#   • E-stop overrides all robot actions and forces safe UI reset
+#   • Jog pages depend on MoveIt Servo being active
 # ─────────────────────────────────────────────
 
 from PyQt6.QtWidgets import (
@@ -35,6 +36,7 @@ from ros_bridge import ROSBridge
 from widgets import ModeButton
 from jog_page import JogPage
 from joint_page import JointPage
+from freedrive_page import FreedrivePage
 from process_manager import ProcessManager
 from estop_controller import EstopController
 
@@ -42,6 +44,7 @@ from estop_controller import EstopController
 PAGE_MAIN = 0
 PAGE_JOG = 1
 PAGE_JOINT = 2
+PAGE_FREEDRIVE = 3
 
 # Mode display constants
 HOME_LABEL = "Home Robot"
@@ -168,6 +171,9 @@ class HMIWindow(QMainWindow):
 
         self.joint_page = JointPage(self.ros, back_callback=self._show_main)
         self.stack.addWidget(self.joint_page)
+
+        self.freedrive_page = FreedrivePage(self.ros, back_callback=self._show_main)
+        self.stack.addWidget(self.freedrive_page)
 
         self.stack.setCurrentIndex(PAGE_MAIN)
 
@@ -314,6 +320,10 @@ class HMIWindow(QMainWindow):
 
         if mode == "cartesian":
             self.stack.setCurrentIndex(PAGE_JOG)
+            return
+
+        if mode == "freedrive":
+            self.stack.setCurrentIndex(PAGE_FREEDRIVE)
             return
 
         self.stack.setCurrentIndex(PAGE_MAIN)
