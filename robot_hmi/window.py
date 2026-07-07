@@ -86,6 +86,7 @@ class HMIWindow(QMainWindow):
         self.encoder_btn = None
         self.enable_robot_btn = None
         self.robot_enabled = False
+        self.estop_active = False
         self.manual_btn = None
         self.ship_btn = None
 
@@ -101,7 +102,7 @@ class HMIWindow(QMainWindow):
 
         # Show window (can be swapped to fullscreen if needed)
         self.show()
-        #self.showFullScreen()
+        self.showFullScreen()
 
         # Build UI hierarchy
         self._build_ui()
@@ -117,6 +118,7 @@ class HMIWindow(QMainWindow):
             kill_fn=self._on_estop_kill,
             reset_ui_fn=self._reset_all_ui,
             set_mode_fn=self._set_mode,
+            release_fn=self._on_estop_reset,
         )
 
         # React to ROS mode updates
@@ -505,13 +507,22 @@ class HMIWindow(QMainWindow):
 
     def _on_estop_trigger(self):
         """Called when E-stop is pressed."""
+        self.estop_active = True
+
         self.stack.setCurrentIndex(PAGE_MAIN)
         self.ros.send_jog('stop')
+
+        # Lock all controls
+        self._set_controls_enabled(False)
 
     def _on_estop_kill(self):
         """Kill all running robot processes."""
         self.procs.kill_manual_init()
         self.procs.kill_encoder_teleop()
+    
+    def _on_estop_reset(self):
+        self.estop_active = False
+        self._set_controls_enabled(True)
 
     def _reset_all_ui(self):
         """Reset UI after E-stop recovery."""
@@ -524,16 +535,19 @@ class HMIWindow(QMainWindow):
             self._reset_mode_button(self.encoder_btn, ENCODER_LABEL, ENCODER_SUB)
         if self.home_btn:
             self._reset_mode_button(self.home_btn, HOME_LABEL, HOME_SUB)
-        if self.enable_robot_btn:
-            self._reset_mode_button(self.enable_robot_btn, ENABLE_LABEL, ENABLE_SUB)
+        #if self.enable_robot_btn:
+        #    self._reset_mode_button(self.enable_robot_btn, ENABLE_LABEL, ENABLE_SUB)
+        #self._set_controls_enabled(self.robot_enabled)
 
     def _set_controls_enabled(self, enabled: bool):
         """Enable/disable main UI controls depending on robot state."""
-        
         # store state
-        self.robot_enabled = enabled
-
-        # buttons you want locked/unlocked
+        if enabled:
+            self.robot_enabled = True
+            
+        allow = enabled and not self.estop_active        
+        
+        # buttons locked/unlocked
         buttons = [
             self.home_btn,
             self.encoder_btn,
@@ -543,7 +557,7 @@ class HMIWindow(QMainWindow):
 
         for btn in buttons:
             if btn:
-                btn.setEnabled(enabled)
+                btn.setEnabled(allow)
 
         # optionally also disable ship + enable button logic
         if self.enable_robot_btn:

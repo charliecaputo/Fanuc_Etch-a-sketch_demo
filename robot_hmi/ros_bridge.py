@@ -212,9 +212,9 @@ class ROSBridge(QObject):
 
         msg.values = [io]
 
-        self.node.get_logger().info(
-            f"[IO_CMD] DO{flag_number} = {value}"
-        )
+        #self.node.get_logger().info(
+        #    f"[IO_CMD] DO{flag_number} = {value}"
+        #)
 
         self.io_cmd_pub.publish(msg)
     

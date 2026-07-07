@@ -47,6 +47,7 @@ class EstopController:
         kill_fn,
         reset_ui_fn,
         set_mode_fn,
+        release_fn,
         hold_required_ms: int = 3000,
     ):
         # Reference to the GUI button
@@ -58,6 +59,7 @@ class EstopController:
         self.kill_fn = kill_fn
         self.reset_ui_fn = reset_ui_fn
         self.set_mode_fn = set_mode_fn
+        self.release_fn = release_fn
 
         # True once the E-STOP has been activated
         self.latched = False
@@ -122,12 +124,13 @@ class EstopController:
         # Stop timing and reset the progress
         self.hold_timer.stop()
         self.hold_time = 0
-
+        
+        self.release_fn()
         # Restore the button to its normal behavior
         self.setup_button()
 
         self.log(
-            "System fully restored and reusable, please re-enable the robot"
+            "System fully restored and reusable"
         )
 
     # =========================================================

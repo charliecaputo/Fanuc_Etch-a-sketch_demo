@@ -32,6 +32,8 @@ class FreedrivePage(QWidget):
         self.setStyleSheet("background-color: #000000;")
         
         self._freedrive_enabled = False
+        self._lock_armed = False      # Lock button is checked
+        self._lock_latched = False    # Freedrive is latched on
 
         self._build_ui()
 
@@ -55,7 +57,7 @@ class FreedrivePage(QWidget):
         title.setStyleSheet("color:white;")
 
         info = QLabel(
-            "Press and hold the button below to enable Free Drive. \n THIS CODE IS UNTESTED ON THE REAL ROBOT, PUBLISHING TO FLAG 8. \n MAKE SURE TO ENABLE IN COLLAB SETTINGS"
+            "Press and hold the button below to enable Free Drive. \n THIS CODE IS UNTESTED ON THE REAL ROBOT, PUBLISHING TO FLAG 8. \n MAKE SURE TO ENABLE IN COLLAB SETTINGS."
         )
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info.setFont(QFont("Arial", 16))
@@ -86,13 +88,43 @@ class FreedrivePage(QWidget):
         self.enable_btn.pressed.connect(self._enable_freedrive)
         self.enable_btn.released.connect(self._disable_freedrive)
 
-        root.addWidget(
-            self.enable_btn,
-            alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        button_row = QHBoxLayout()
+        button_row.setSpacing(15)
+
+        button_row.addStretch()
+        button_row.addWidget(self.enable_btn)
+
+        self.lock_btn = QPushButton("🔒")
+        self.lock_btn.setCheckable(True)
+        self.lock_btn.setFixedSize(80, 80)
+        self.lock_btn.setFont(QFont("Arial", 22))
+        self.lock_btn.setStyleSheet("""
+        QPushButton {
+            background:#444444;
+            color:white;
+            border:3px solid #888888;
+            border-radius:12px;
+        }
+
+        QPushButton:checked {
+            background:#0077cc;
+            border:3px solid #33bbff;
+        }
+
+        QPushButton:pressed {
+            background:#666666;
+        }
+        """)
+
+        self.lock_btn.clicked.connect(self._lock_clicked)
+
+        button_row.addWidget(self.lock_btn)
+        button_row.addStretch()
+
+        root.addLayout(button_row)
 
         root.addStretch()
-
+        
     def _build_header(self):
 
         row = QHBoxLayout()
@@ -143,30 +175,73 @@ class FreedrivePage(QWidget):
     # ---------------------------------------------------------
 
     def _enable_freedrive(self):
+        # If already latched, pressing HOLD again unlocks everything.
+        if self._lock_latched:
+            self._lock_latched = False
+            self.lock_btn.setChecked(False)
+            self._lock_armed = False
+            self._disable_freedrive()
+            return
+
         if not self._freedrive_enabled:
             self._freedrive_enabled = True
             self.ros.set_flag(self.FLAG, True)
 
+        # HOLD + LOCK -> latch on
+        if self._lock_armed:
+            self._lock_latched = True
+
     def _disable_freedrive(self):
+        # Ignore release if we're latched
+        if self._lock_latched:
+            return
+
         if self._freedrive_enabled:
             self._freedrive_enabled = False
             self.ros.set_flag(self.FLAG, False)
+            
+    def _lock_clicked(self):
+        if self._lock_latched:
+            # Unlock while latched
+            self._lock_latched = False
+            self.lock_btn.setChecked(False)
+            self._lock_armed = False
+            self._disable_freedrive()
+        else:
+            self._lock_armed = self.lock_btn.isChecked()
 
     # ---------------------------------------------------------
     # Safety
     # ---------------------------------------------------------
 
     def hideEvent(self, event):
+        self._lock_latched = False
+        self._lock_armed = False
+
+        if hasattr(self, "lock_btn"):
+            self.lock_btn.setChecked(False)
+
         self._disable_freedrive()
         super().hideEvent(event)
 
     def closeEvent(self, event):
+        self._lock_latched = False
+        self._lock_armed = False
+
+        if hasattr(self, "lock_btn"):
+            self.lock_btn.setChecked(False)
+
         self._disable_freedrive()
         super().closeEvent(event)
         
-    def showEvent(self, event):
         self._disabled = False
 
     def _on_back(self):
+        self._lock_latched = False
+        self._lock_armed = False
+
+        if hasattr(self, "lock_btn"):
+            self.lock_btn.setChecked(False)
+
         self._disable_freedrive()
         self.back_callback()
