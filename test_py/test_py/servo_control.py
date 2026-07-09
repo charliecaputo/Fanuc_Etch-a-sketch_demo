@@ -23,7 +23,6 @@
 
 import rclpy
 from rclpy.node import Node
-from pynput import keyboard
 
 from geometry_msgs.msg import TwistStamped
 from moveit_msgs.srv import ServoCommandType
@@ -55,9 +54,6 @@ class EncoderServo(Node):
 
         self.encoder_x = 2048
         self.encoder_y = 2048
-
-        self.keys_held = set()
-        self.enc_step = 20
 
         # =====================================================
         # Workspace
@@ -102,18 +98,16 @@ class EncoderServo(Node):
         self.create_subscription(
             Float32MultiArray,
             '/encoder_x_mm',
-            self.encoder_callback,
+            self.encoder_x_callback,
             10
         )
-
-        # =====================================================
-        # Keyboard listener
-        # =====================================================
-        self.listener = keyboard.Listener(
-            on_press=self.on_press,
-            on_release=self.on_release
+        
+        self.create_subscription(
+            Float32MultiArray,
+            '/encoder_y_mm',
+            self.encoder_y_callback,
+            10
         )
-        self.listener.start()
 
         # =====================================================
         # Reusable Twist message
@@ -149,13 +143,13 @@ class EncoderServo(Node):
         )
 
         self.get_logger().info(
-            "Encoder Servo READY (optimized)"
+            "Encoder Servo READY"
         )
 
     # =========================================================
     # Encoder callback
     # =========================================================
-    def encoder_callback(self, msg):
+    def encoder_x_callback(self, msg):
 
         if not msg.data:
             return
@@ -165,35 +159,17 @@ class EncoderServo(Node):
         self.encoder_x = int(
             (angle_deg % 360.0) * (4096.0 / 360.0)
         )
+        
+    def encoder_y_callback(self, msg):
 
-    # =========================================================
-    # Keyboard
-    # =========================================================
-    def on_press(self, key):
-        try:
-            self.keys_held.add(key.char)
-        except Exception:
-            pass
+        if not msg.data:
+            return
 
-    def on_release(self, key):
-        try:
-            self.keys_held.discard(key.char)
-        except Exception:
-            pass
+        angle_deg = float(msg.data[0])
 
-    def update_y(self):
-
-        if 'j' in self.keys_held:
-            self.encoder_y += self.enc_step
-
-        if 'l' in self.keys_held:
-            self.encoder_y -= self.enc_step
-
-        self.encoder_y = max(
-            self.ENC_MIN,
-            min(self.ENC_MAX, self.encoder_y)
+        self.encoder_y = int(
+            (angle_deg % 360.0) * (4096.0 / 360.0)
         )
-
     # =========================================================
     # TF cache update
     # =========================================================
@@ -268,8 +244,6 @@ class EncoderServo(Node):
     # =========================================================
     def control_loop(self):
 
-        self.update_y()
-
         if self.current_x is None:
             return
 
@@ -327,7 +301,6 @@ def main():
         pass
 
     finally:
-        node.listener.stop()
         node.destroy_node()
         rclpy.shutdown()
 

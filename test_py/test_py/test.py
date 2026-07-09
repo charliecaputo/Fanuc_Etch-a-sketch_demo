@@ -1,14 +1,35 @@
+# ─────────────────────────────────────────────
+# servo_control.py
+#
+# ROS2 MoveIt Servo encoder-based Cartesian controller.
+#
+# Responsibilities:
+#   • Convert encoder values into workspace targets
+#   • Track end-effector pose via TF2
+#   • Compute Cartesian error (x/y) to target position
+#   • Apply proportional control (P-controller)
+#   • Publish TwistStamped commands to MoveIt Servo
+#   • Support keyboard-assisted secondary encoder axis control
+#   • Maintain continuous low-latency control loop
+#
+# NOTE:
+#   • Uses MoveIt Servo switch_command_type service for activation
+#   • Assumes base_link → tool_link TF is available
+#   • Encoder values are mapped into a fixed workspace region
+#   • Designed for real-time closed-loop Cartesian control
+# ─────────────────────────────────────────────
+
 #!/usr/bin/env python3
 
 import rclpy
 from rclpy.node import Node
-from pynput import keyboard
 
 from geometry_msgs.msg import TwistStamped
 from moveit_msgs.srv import ServoCommandType
 from std_msgs.msg import Float32MultiArray
 
 import tf2_ros
+
 
 
 class EncoderServo(Node):
@@ -34,17 +55,14 @@ class EncoderServo(Node):
         self.encoder_x = 2048
         self.encoder_y = 2048
 
-        self.keys_held = set()
-        self.enc_step = 20
-
         # =====================================================
         # Workspace
         # =====================================================
-        self.WS_X_MIN = 0.39
-        self.WS_X_MAX = 0.66
+        self.WS_X_MIN = 0.42
+        self.WS_X_MAX = 0.68
 
-        self.WS_Y_MIN = -0.23
-        self.WS_Y_MAX = 0.34
+        self.WS_Y_MIN = -0.285
+        self.WS_Y_MAX = 0.285
 
         # Precompute scaling
         self.ws_x_range = self.WS_X_MAX - self.WS_X_MIN
@@ -80,18 +98,16 @@ class EncoderServo(Node):
         self.create_subscription(
             Float32MultiArray,
             '/encoder_x_mm',
-            self.encoder_callback,
+            self.encoder_x_callback,
             10
         )
-
-        # =====================================================
-        # Keyboard listener
-        # =====================================================
-        self.listener = keyboard.Listener(
-            on_press=self.on_press,
-            on_release=self.on_release
+        
+        self.create_subscription(
+            Float32MultiArray,
+            '/encoder_y_mm',
+            self.encoder_y_callback,
+            10
         )
-        self.listener.start()
 
         # =====================================================
         # Reusable Twist message
@@ -127,13 +143,13 @@ class EncoderServo(Node):
         )
 
         self.get_logger().info(
-            "Encoder Servo READY (optimized)"
+            "Encoder Servo READY"
         )
 
     # =========================================================
     # Encoder callback
     # =========================================================
-    def encoder_callback(self, msg):
+    def encoder_x_callback(self, msg):
 
         if not msg.data:
             return
@@ -143,35 +159,17 @@ class EncoderServo(Node):
         self.encoder_x = int(
             (angle_deg % 360.0) * (4096.0 / 360.0)
         )
+        
+    def encoder_y_callback(self, msg):
 
-    # =========================================================
-    # Keyboard
-    # =========================================================
-    def on_press(self, key):
-        try:
-            self.keys_held.add(key.char)
-        except Exception:
-            pass
+        if not msg.data:
+            return
 
-    def on_release(self, key):
-        try:
-            self.keys_held.discard(key.char)
-        except Exception:
-            pass
+        angle_deg = float(msg.data[0])
 
-    def update_y(self):
-
-        if 'j' in self.keys_held:
-            self.encoder_y += self.enc_step
-
-        if 'l' in self.keys_held:
-            self.encoder_y -= self.enc_step
-
-        self.encoder_y = max(
-            self.ENC_MIN,
-            min(self.ENC_MAX, self.encoder_y)
+        self.encoder_y = int(
+            (angle_deg % 360.0) * (4096.0 / 360.0)
         )
-
     # =========================================================
     # TF cache update
     # =========================================================
@@ -246,8 +244,6 @@ class EncoderServo(Node):
     # =========================================================
     def control_loop(self):
 
-        self.update_y()
-
         if self.current_x is None:
             return
 
@@ -305,7 +301,6 @@ def main():
         pass
 
     finally:
-        node.listener.stop()
         node.destroy_node()
         rclpy.shutdown()
 

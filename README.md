@@ -8,7 +8,7 @@ Currently the code is running off the robot hmi. One encoder works (for x direct
 
 
 ## Dependencies
-keyboard_teleop, servo_control = pynput (allows keybaord input).\
+keyboard_teleop = pynput (allows keybaord input).\
 Enocder_test = smbus2 (allows i2c connection).\
 These should be installable with ros "rosdep install --from-paths src --ignore-src -r -y". If not they can be installed with "sudo apt install python3-\<dependecy name\>"
 
@@ -28,7 +28,7 @@ The HMI should pop up at this point\
 **Buttons (Main Page):**
 1. Enable Robot: This runs the launch code found in test_py which establishes connection and starts ros2 controllers for the crx10ia (Currently the simulated robot)
 2. Home Robot: Homes the robot 
-3. Encoder Teleop: The current functional code. Uses keyboard for y axis and encoder for x axis (still waiting on second encoder)
+3. Encoder Teleop: The current functional code.
 4. Ship: Moves the robot in and out of the shipping position based on its current location (joint states).
 5. E-Stop: Kills all running codes except the launch file
 6. "X" in corner: Same as estop but also shuts down the app and launch file
@@ -57,3 +57,8 @@ The HMI should pop up at this point\
 2. Hold For Free Drive: Self explanatory. Hold it down and the robot should go into Free Drive or Manual Guided Teaching.
 3. 🔒: Allows user to lock the Free Drive mode so that the button doesn't need to be held. Press it, then press the free drive. When either button is pressed the lock is disabled.
 >**Note:** This function is untested on the real robot. It works by letting user press and hold the button which raises Flag 8. Make sure to enable the "Enabling Input" in the collaborative settings of the robot. When the button is released Manual Guided Teaching is disabled.
+
+**Current Issues and Fixes**
+Ethernet connection:\
+If ever the connection fails. Go to wired settings. See if it says connecting or connected. if it says connecting, click the gear icon, click IPv4. then select manual. lastly make address = 192.168.1.5 and subnet mask = 255.255.255.0. then apply.\
+you may also need to run: sudo ip link set eth0 down and then sudo ip link set eth0 up
