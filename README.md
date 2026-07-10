@@ -63,3 +63,7 @@ Ethernet connection:\
 If ever the connection fails. Go to wired settings. See if it says connecting or connected. if it says connecting, click the gear icon, click IPv4. then select manual. lastly make address = 192.168.1.5 and subnet mask = 255.255.255.0. then apply.\
 >**Note:** YOU WIll need to run: sudo ip link set eth0 down and then sudo ip link set eth0 up
 - add it to launch script 
+
+## Videos
+[Simulation and HMI](https://www.youtube.com/watch?v=KgPVzGzSmQw)
+
