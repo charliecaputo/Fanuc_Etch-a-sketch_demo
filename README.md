@@ -61,4 +61,5 @@ The HMI should pop up at this point\
 ## Current Issues and Fixes
 Ethernet connection:\
 If ever the connection fails. Go to wired settings. See if it says connecting or connected. if it says connecting, click the gear icon, click IPv4. then select manual. lastly make address = 192.168.1.5 and subnet mask = 255.255.255.0. then apply.\
-you may also need to run: sudo ip link set eth0 down and then sudo ip link set eth0 up
+>**Note:** YOU WIll need to run: sudo ip link set eth0 down and then sudo ip link set eth0 up
+- add it to launch script 
