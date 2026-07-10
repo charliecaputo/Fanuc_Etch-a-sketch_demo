@@ -58,7 +58,7 @@ The HMI should pop up at this point\
 3. 🔒: Allows user to lock the Free Drive mode so that the button doesn't need to be held. Press it, then press the free drive. When either button is pressed the lock is disabled.
 >**Note:** This function is untested on the real robot. It works by letting user press and hold the button which raises Flag 8. Make sure to enable the "Enabling Input" in the collaborative settings of the robot. When the button is released Manual Guided Teaching is disabled.
 
-**Current Issues and Fixes**
+## Current Issues and Fixes
 Ethernet connection:\
 If ever the connection fails. Go to wired settings. See if it says connecting or connected. if it says connecting, click the gear icon, click IPv4. then select manual. lastly make address = 192.168.1.5 and subnet mask = 255.255.255.0. then apply.\
 you may also need to run: sudo ip link set eth0 down and then sudo ip link set eth0 up
