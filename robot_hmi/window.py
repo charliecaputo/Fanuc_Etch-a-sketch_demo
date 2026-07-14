@@ -102,7 +102,7 @@ class HMIWindow(QMainWindow):
 
         # Show window (can be swapped to fullscreen if needed)
         self.show()
-        self.showFullScreen()
+        #self.showFullScreen()
 
         # Build UI hierarchy
         self._build_ui()
@@ -391,7 +391,10 @@ class HMIWindow(QMainWindow):
         cmd = (
             "source /opt/ros/jazzy/setup.bash && "
             "source /home/fanuc/fanuc_ws/install/setup.bash && "
-            "ros2 launch test_py fac_moveit_test.launch.py use_mock:=true"
+            # SIM
+            #"ros2 launch test_py fac_moveit_test.launch.py use_mock:=true"
+            #REAL
+            "ros2 launch test_py fac_moveit_test.launch.py robot_ip:=192.168.1.100 use_mock:=false"
         )
 
         try:

@@ -49,11 +49,12 @@ class EncoderServo(Node):
         # =====================================================
         # Encoder state
         # =====================================================
-        self.ENC_MIN = 0
-        self.ENC_MAX = 4096
+        self.DEG_MIN = 3
+        self.DEG_MAX = 357
+        self.deg_range = self.DEG_MAX - self.DEG_MIN
 
-        self.encoder_x = 2048
-        self.encoder_y = 2048
+        self.encoder_x = None
+        self.encoder_y = None
 
         # =====================================================
         # Workspace
@@ -67,15 +68,25 @@ class EncoderServo(Node):
         # Precompute scaling
         self.ws_x_range = self.WS_X_MAX - self.WS_X_MIN
         self.ws_y_range = self.WS_Y_MAX - self.WS_Y_MIN
-        self.enc_scale = 1.0 / self.ENC_MAX
-
+        
         # =====================================================
         # Controller
         # =====================================================
-        self.kp = 5.0
-        self.vmax = 0.5
+        self.kp = 2
+        self.vmax = 0.75 #m/s
         self.deadband = 0.002
+        self.max_accel = 2      # m/s²
+        self.dt = 0.02
+        self.max_delta = self.max_accel * self.dt
+        self.cmd_vx = 0.0
+        self.cmd_vy = 0.0
+        
+        # Filter coefficient (0 < alpha <= 1)
+        self.tf_alpha = 0.1
 
+        self.filtered_x = None
+        self.filtered_y = None
+        
         # =====================================================
         # TF
         # =====================================================
@@ -99,14 +110,14 @@ class EncoderServo(Node):
             Float32MultiArray,
             '/encoder_x_mm',
             self.encoder_x_callback,
-            10
+            1
         )
         
         self.create_subscription(
             Float32MultiArray,
             '/encoder_y_mm',
             self.encoder_y_callback,
-            10
+            1
         )
 
         # =====================================================
@@ -130,15 +141,15 @@ class EncoderServo(Node):
         # Timers
         # =====================================================
 
-        # TF updates at 10 Hz
+        # TF updates at 50 Hz
         self.tf_timer = self.create_timer(
-            0.10,
+            0.01,
             self.update_tf
         )
 
-        # Control loop at 20 Hz
+        # Control loop at 50 Hz
         self.control_timer = self.create_timer(
-            0.05,
+            0.01,
             self.control_loop
         )
 
@@ -154,22 +165,16 @@ class EncoderServo(Node):
         if not msg.data:
             return
 
-        angle_deg = float(msg.data[0])
-
-        self.encoder_x = int(
-            (angle_deg % 360.0) * (4096.0 / 360.0)
-        )
+        self.encoder_x = float(msg.data[0])
+        
         
     def encoder_y_callback(self, msg):
 
         if not msg.data:
             return
 
-        angle_deg = float(msg.data[0])
-
-        self.encoder_y = int(
-            (angle_deg % 360.0) * (4096.0 / 360.0)
-        )
+        self.encoder_y = float(msg.data[0])
+        
     # =========================================================
     # TF cache update
     # =========================================================
@@ -190,11 +195,32 @@ class EncoderServo(Node):
                 rclpy.time.Time()
             )
 
-            self.current_x = tf.transform.translation.x
-            self.current_y = tf.transform.translation.y
+            x = tf.transform.translation.x
+            y = tf.transform.translation.y
+
+            if self.filtered_x is None:
+                self.filtered_x = x
+                self.filtered_y = y
+            else:
+                self.filtered_x += self.tf_alpha * (x - self.filtered_x)
+                self.filtered_y += self.tf_alpha * (y - self.filtered_y)
+
+            self.current_x = self.filtered_x
+            self.current_y = self.filtered_y
 
         except Exception:
             pass
+            
+    def limit_acceleration(self, desired, current):
+        delta = desired - current
+
+        if delta > self.max_delta:
+            delta = self.max_delta
+        elif delta < -self.max_delta:
+            delta = -self.max_delta
+
+        return current + delta      
+    
 
     # =========================================================
     # Encoder -> workspace
@@ -203,12 +229,12 @@ class EncoderServo(Node):
 
         target_x = (
             self.WS_X_MIN +
-            self.encoder_x * self.enc_scale * self.ws_x_range
+            (self.encoder_x / self.deg_range) * self.ws_x_range
         )
 
         target_y = (
             self.WS_Y_MIN +
-            self.encoder_y * self.enc_scale * self.ws_y_range
+            (self.encoder_y / self.deg_range) * self.ws_y_range
         )
 
         return target_x, target_y
@@ -244,7 +270,12 @@ class EncoderServo(Node):
     # =========================================================
     def control_loop(self):
 
-        if self.current_x is None:
+        if (
+            self.current_x is None or
+            self.current_y is None or
+            self.encoder_x is None or
+            self.encoder_y is None
+        ):
             return
 
         target_x, target_y = self.encoder_to_workspace()
@@ -254,18 +285,34 @@ class EncoderServo(Node):
 
         vx = 0.0
         vy = 0.0
-
+        
+        desired_vx = 0.0
+        desired_vy = 0.0    
         if abs(ex) > self.deadband:
-            vx = max(
+            desired_vx = max(
                 -self.vmax,
                 min(self.vmax, self.kp * ex)
             )
 
         if abs(ey) > self.deadband:
-            vy = max(
+            desired_vy = max(
                 -self.vmax,
                 min(self.vmax, self.kp * ey)
             )
+        
+        # set accel
+        self.cmd_vx = self.limit_acceleration(
+            desired_vx,
+            self.cmd_vx
+        )
+        #set accel
+        self.cmd_vy = self.limit_acceleration(
+            desired_vy,
+            self.cmd_vy
+        )
+
+        vx = self.cmd_vx
+        vy = self.cmd_vy
 
         # Skip publish if command unchanged
         if (

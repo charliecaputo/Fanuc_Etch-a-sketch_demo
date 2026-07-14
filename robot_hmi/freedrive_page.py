@@ -21,7 +21,7 @@ class FreedrivePage(QWidget):
     Release immediately disables MGT.
     """
 
-    FLAG = 8
+    FLAG = 113
 
     def __init__(self, ros, back_callback):
         super().__init__()

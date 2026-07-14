@@ -125,7 +125,10 @@ class ProcessManager:
                     "pkill -9 -f slider_gui_node & "
                     "pkill -9 -f servo_node & "
                     "pkill -9 -f move_group & "
-                    "pkill -9 -f jog_listener_node "
+                    "pkill -9 -f jog_listener_node &"
+                    "pkill -9 -f encoder_read &"
+                    "pkill -9 -f servo_control &"
+                    "pkill -9 -f manual_init"
                 )
                 subprocess.Popen(["bash", "-c", cmd], preexec_fn=os.setsid)
 

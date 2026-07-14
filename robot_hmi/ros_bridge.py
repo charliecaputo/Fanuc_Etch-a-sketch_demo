@@ -206,7 +206,7 @@ class ROSBridge(QObject):
 
         io = BoolIO()
 
-        io.io_type.type = "F"     # Digital Output
+        io.io_type.type = "DO"     # Digital Output
         io.index = flag_number     # e.g. 101
         io.value = value
 

@@ -5,6 +5,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
+from collections import deque
 
 try:
     import smbus2
@@ -31,7 +32,7 @@ class AS5600MuxNode(Node):
         self.declare_parameter('x_channel', 1)
         self.declare_parameter('y_channel', 0)
 
-        self.declare_parameter('publish_hz', 30.0)
+        self.declare_parameter('publish_hz', 100.0)
 
         # X calibration
         self.declare_parameter('x_zero_deg', 0.0)
@@ -44,6 +45,10 @@ class AS5600MuxNode(Node):
         self.declare_parameter('y_scale_mm_per_deg', 1.0)
         self.declare_parameter('y_limit_min_mm', -100.0)
         self.declare_parameter('y_limit_max_mm', 100.0)
+        
+        self.maf_size = 5
+        self.x_filter = deque(maxlen=self.maf_size)
+        self.y_filter = deque(maxlen=self.maf_size)
 
         if smbus2 is None:
             raise RuntimeError(
@@ -70,6 +75,17 @@ class AS5600MuxNode(Node):
         self.y_scale = float(self.get_parameter('y_scale_mm_per_deg').value)
         self.y_min = float(self.get_parameter('y_limit_min_mm').value)
         self.y_max = float(self.get_parameter('y_limit_max_mm').value)
+        
+        self.min_valid_deg = 3.0
+        self.max_valid_deg = 357.0
+        # X
+        self.prev_raw_x = None
+        self.unwrapped_x = None
+
+        # Y
+        self.prev_raw_y = None
+        self.unwrapped_y = None
+        
 
         self.bus = smbus2.SMBus(self.bus_num)
 
@@ -105,6 +121,44 @@ class AS5600MuxNode(Node):
 
         angle_raw = ((raw[0] << 8) | raw[1]) & 0x0FFF
         return (angle_raw / 4096.0) * 360.0
+    
+    def hard_stop(self, angle):
+        """
+        Clamp continuous angle after unwrapping.
+        """
+
+        if angle > self.max_valid_deg:
+            return self.max_valid_deg
+
+        if angle < self.min_valid_deg:
+            return self.min_valid_deg
+
+        return angle
+    
+    def moving_average_filter(self, value, history):
+        history.append(value)
+        return sum(history) / len(history)
+    
+    def unwrap_angle(self, raw_angle, prev_raw, unwrapped):
+        """
+        Convert 0-360° encoder readings into a continuous angle.
+        """
+
+        # First measurement
+        if prev_raw is None:
+            return raw_angle, raw_angle, raw_angle
+
+        delta = raw_angle - prev_raw
+
+        # Detect wrap
+        if delta > 180.0:
+            delta -= 360.0
+        elif delta < -180.0:
+            delta += 360.0
+
+        unwrapped += delta
+
+        return unwrapped, raw_angle, unwrapped
 
     def angle_to_mm(self, angle_deg, zero_deg, scale, min_mm, max_mm):
         delta = angle_deg - zero_deg
@@ -114,29 +168,49 @@ class AS5600MuxNode(Node):
     def timer_callback(self):
         try:
             # X encoder
-            x_deg = self.read_angle_deg(self.x_channel)
+            raw_x = self.read_angle_deg(self.x_channel)
+            x_deg, self.prev_raw_x, self.unwrapped_x = self.unwrap_angle(
+                raw_x,
+                self.prev_raw_x,
+                self.unwrapped_x
+            )
+            
+            x_deg = self.hard_stop(x_deg)
+
+            filtered_x_deg = self.moving_average_filter(x_deg, self.x_filter)
+
             x_mm = self.angle_to_mm(
-                x_deg,
+                filtered_x_deg,
                 self.x_zero_deg,
                 self.x_scale,
                 self.x_min,
                 self.x_max
             )
 
-            x_msg = Float32MultiArray()
-            x_msg.data = [float(x_deg), float(x_mm)]
-            self.x_publisher.publish(x_msg)
-
             # Y encoder
-            y_deg = self.read_angle_deg(self.y_channel)
+            raw_y = self.read_angle_deg(self.y_channel)
+            y_deg, self.prev_raw_y, self.unwrapped_y = self.unwrap_angle(
+                raw_y,
+                self.prev_raw_y,
+                self.unwrapped_y
+            )
+            y_deg = self.hard_stop(y_deg)
+            
+            filtered_y_deg = self.moving_average_filter(y_deg, self.y_filter)
+                
             y_mm = self.angle_to_mm(
-                y_deg,
+                filtered_y_deg,
                 self.y_zero_deg,
                 self.y_scale,
                 self.y_min,
                 self.y_max
             )
 
+             #pub x
+            x_msg = Float32MultiArray()
+            x_msg.data = [float(x_deg), float(x_mm)]
+            self.x_publisher.publish(x_msg)
+            #pub y
             y_msg = Float32MultiArray()
             y_msg.data = [float(y_deg), float(y_mm)]
             self.y_publisher.publish(y_msg)
