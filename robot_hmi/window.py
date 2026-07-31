@@ -16,7 +16,7 @@
 #   • Log system output to terminal widget
 #
 # NOTE:
-#   • This UI assumes a running ROS2 environment (Jazzy or compatible)
+#   • This UI assumes a running ROS2 environment (humble or compatible)
 #   • ProcessManager is responsible for all subprocess lifecycle control
 #   • E-stop overrides all robot actions and forces safe UI reset
 #   • Jog pages depend on MoveIt Servo being active
@@ -137,10 +137,14 @@ class HMIWindow(QMainWindow):
         self.term_output.appendPlainText(msg)
         self.term_output.ensureCursorVisible()
 
+    # def _print(self, *args, sep=" ", end="\n"):
+    #     """Print-style wrapper for logging."""
+    #     msg = sep.join(str(a) for a in args)
+    #     self._log(msg)
+
     def _print(self, *args, sep=" ", end="\n"):
-        """Print-style wrapper for logging."""
         msg = sep.join(str(a) for a in args)
-        self._log(msg)
+        print(msg, flush=True)
 
     def _set_mode(self, mode: str):
         """Update internal mode state."""
@@ -389,12 +393,12 @@ class HMIWindow(QMainWindow):
         self.enable_robot_btn.sub_widget.setText("Launching MoveIt")
 
         cmd = (
-            "source /opt/ros/jazzy/setup.bash && "
-            "source /home/fanuc/fanuc_ws/install/setup.bash && "
+            "source /opt/ros/humble/setup.bash && "
+            "source /home/caputocc@frna.com/fanuc_ws/install/setup.bash && "
             # SIM
             #"ros2 launch test_py fac_moveit_test.launch.py use_mock:=true"
             #REAL
-            "ros2 launch test_py fac_moveit_test.launch.py robot_ip:=192.168.1.100 use_mock:=false"
+            "ros2 launch test_py fac_moveit_test.launch.py robot_ip:=10.69.17.244 use_mock:=false"
         )
 
         try:
@@ -439,9 +443,9 @@ class HMIWindow(QMainWindow):
         self.home_btn._set_active()
 
         cmd = (
-            "source /opt/ros/jazzy/setup.bash && "
-            "source /home/fanuc/fanuc_ws/install/setup.bash && "
-            "python3 /home/fanuc/fanuc_ws/src/test_py/test_py/manual_init.py"
+            "source /opt/ros/humble/setup.bash && "
+            "source /home/caputocc@frna.com/fanuc_ws/install/setup.bash && "
+            "python3 /home/caputocc@frna.com/fanuc_ws/src/test_py/test_py/manual_init.py"
         )
         self.procs.start_manual_init(cmd)
 
@@ -497,10 +501,11 @@ class HMIWindow(QMainWindow):
         self.encoder_btn._set_active()
 
         cmd = (
-            "source /opt/ros/jazzy/setup.bash && "
-            "source /home/fanuc/fanuc_ws/install/setup.bash && "
+            "source /opt/ros/humble/setup.bash && "
+            "source /home/caputocc@frna.com/fanuc_ws/install/setup.bash && "
             "ros2 run test_py encoder_read --ros-args --params-file ~/fanuc_ws/src/test_py/config/demo_params.yaml & "
             "ros2 run test_py servo_control "
+            #"ros2 run test_py test"
         )
         self.procs.start_encoder_teleop(cmd)
 

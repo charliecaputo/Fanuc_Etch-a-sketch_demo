@@ -6,9 +6,9 @@
 <!-- markdownlint-disable MD013 -->
 # fanuc_driver
 
-[![ROS 2 Jazzy](https://img.shields.io/badge/ROS%202-JAZZY_JALISCO-blue)](https://docs.ros.org/en/jazzy/index.html)
-[![Ubuntu Noble](https://img.shields.io/badge/UBUNTU-24.04-orange)](https://documentation.ubuntu.com/release-notes/24.04/)
-[![Main Branch](https://img.shields.io/badge/BRANCH-main-green)](https://github.com/FANUC-CORPORATION/fanuc_driver/tree/main)
+[![ROS 2 Humble](https://img.shields.io/badge/ROS%202-HUMBLE_HAWKSBILL-blue)](https://docs.ros.org/en/humble/index.html)
+[![Ubuntu Jammy](https://img.shields.io/badge/UBUNTU-22.04-orange)](https://documentation.ubuntu.com/release-notes/22.04/)
+[![Humble Branch](https://img.shields.io/badge/BRANCH-humble-green)](https://github.com/FANUC-CORPORATION/fanuc_driver/tree/humble)
 
 ![FANUC ROS 2 Control Driver](/images/FANUC_ros2_ControlDriver.jpg "FANUC ROS 2 Control Driver")
 
@@ -18,12 +18,12 @@ This repository hosts the source code of the FANUC ROS 2 Driver project, a ros2_
 This project will allow users to develop a ROS 2 application to control a FANUC virtual or real robot.
 
 **Note**
-The `main` branch targets **ROS 2 Jazzy Jalisco**.
-Users of **ROS 2 Humble Hawksbill** should refer to the [humble](https://github.com/FANUC-CORPORATION/fanuc_driver/tree/humble) branch.
+The `humble` branch targets **ROS 2 Humble Hawksbill**.
+Users of **ROS 2 Jazzy Jalisco** should refer to the [main](https://github.com/FANUC-CORPORATION/fanuc_driver/tree/main) branch.
 
 ## Installation
 
-See the [FANUC ROS 2 Driver Documentation](https://fanuc-corporation.github.io/fanuc_driver_doc/) for instructions.
+See the [FANUC ROS 2 Driver Documentation](https://fanuc-corporation.github.io/fanuc_driver_doc/humble/) for instructions.
 
 ## Licensing
 

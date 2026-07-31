@@ -166,7 +166,7 @@ def launch_setup(context, *args, **kwargs):
 
     servo_node = Node(
         package="moveit_servo",
-        executable="servo_node",
+        executable="servo_node_main",
         output="screen",
         parameters=[
             moveit_config.to_dict(),

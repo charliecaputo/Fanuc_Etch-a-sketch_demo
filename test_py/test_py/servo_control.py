@@ -25,8 +25,8 @@ import rclpy
 from rclpy.node import Node
 
 from geometry_msgs.msg import TwistStamped
-from moveit_msgs.srv import ServoCommandType
 from std_msgs.msg import Float32MultiArray
+from std_srvs.srv import Trigger
 
 import tf2_ros
 
@@ -72,9 +72,9 @@ class EncoderServo(Node):
         # =====================================================
         # Controller
         # =====================================================
-        self.kp = 2
-        self.vmax = 0.75 #m/s
-        self.deadband = 0.002
+        self.kp = 0.5
+        self.vmax = 0.02 #m/s
+        self.deadband = 0.01
         self.max_accel = 2      # m/s²
         self.dt = 0.02
         self.max_delta = self.max_accel * self.dt
@@ -82,7 +82,7 @@ class EncoderServo(Node):
         self.cmd_vy = 0.0
         
         # Filter coefficient (0 < alpha <= 1)
-        self.tf_alpha = 0.1
+        self.tf_alpha = 0.2
 
         self.filtered_x = None
         self.filtered_y = None
@@ -143,13 +143,13 @@ class EncoderServo(Node):
 
         # TF updates at 50 Hz
         self.tf_timer = self.create_timer(
-            0.01,
+            0.02,
             self.update_tf
         )
 
         # Control loop at 50 Hz
         self.control_timer = self.create_timer(
-            0.01,
+            0.02,
             self.control_loop
         )
 
@@ -240,31 +240,34 @@ class EncoderServo(Node):
         return target_x, target_y
 
     # =========================================================
-    # Activate servo
+    # Activate servo (ROS2 Humble)
     # =========================================================
     def _activate_servo(self):
 
         client = self.create_client(
-            ServoCommandType,
-            '/servo_node/switch_command_type'
+            Trigger,
+            '/servo_node/start_servo'
+        )
+
+        self.get_logger().info(
+            "Waiting for MoveIt Servo..."
         )
 
         if client.wait_for_service(timeout_sec=5.0):
 
-            req = ServoCommandType.Request()
-            req.command_type = 1
+            req = Trigger.Request()
 
-            client.call_async(req)
+            future = client.call_async(req)
 
             self.get_logger().info(
-                "Servo command type activated"
+                "MoveIt Servo start request sent"
             )
 
         else:
             self.get_logger().warn(
-                "Servo service unavailable"
+                "Servo start service unavailable"
             )
-
+            
     # =========================================================
     # Control loop
     # =========================================================
@@ -279,6 +282,10 @@ class EncoderServo(Node):
             return
 
         target_x, target_y = self.encoder_to_workspace()
+        # self.get_logger().info(
+        #     f"target=({target_x:.3f},{target_y:.3f}) "
+        #     f"current=({self.current_x:.3f},{self.current_y:.3f})"
+        # )
 
         ex = target_x - self.current_x
         ey = target_y - self.current_y
@@ -288,6 +295,14 @@ class EncoderServo(Node):
         
         desired_vx = 0.0
         desired_vy = 0.0    
+        
+        # self.get_logger().info(
+        #     f"deadband={self.deadband} "
+        #     f"abs(ey)={abs(ey)} "
+        #     f"check={abs(ey) > self.deadband}"
+        # )
+
+
         if abs(ex) > self.deadband:
             desired_vx = max(
                 -self.vmax,
@@ -299,27 +314,31 @@ class EncoderServo(Node):
                 -self.vmax,
                 min(self.vmax, self.kp * ey)
             )
+
+        if abs(ex) < self.deadband:
+            desired_vx = 0.0
         
-        # set accel
         self.cmd_vx = self.limit_acceleration(
             desired_vx,
             self.cmd_vx
         )
-        #set accel
+
+        if abs(ey) < self.deadband:
+            self.desired_vy = 0.0
+        
         self.cmd_vy = self.limit_acceleration(
             desired_vy,
             self.cmd_vy
         )
-
         vx = self.cmd_vx
         vy = self.cmd_vy
 
         # Skip publish if command unchanged
-        if (
-            vx == self.last_vx and
-            vy == self.last_vy
-        ):
-            return
+        # if (
+        #     vx == self.last_vx and
+        #     vy == self.last_vy
+        # ):
+        #     return
 
         self.last_vx = vx
         self.last_vy = vy
@@ -332,6 +351,12 @@ class EncoderServo(Node):
 
         msg.twist.linear.x = vx
         msg.twist.linear.y = vy
+        msg.twist.linear.z = 0.0
+
+        msg.twist.angular.x = 0.0
+        msg.twist.angular.y = 0.0
+        msg.twist.angular.z = 0.0
+        
 
         self.twist_pub.publish(msg)
 

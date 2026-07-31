@@ -19,9 +19,10 @@
 import threading
 import rclpy
 from std_msgs.msg import String, Float64, Float32, Bool
-from moveit_msgs.srv import ServoCommandType
+#from moveit_msgs.srv import ServoCommandType
 from fanuc_msgs.msg import IOCmd, BoolIO
 from PyQt6.QtCore import pyqtSignal, QObject
+from std_srvs.srv import Trigger
 
 
 class ROSBridge(QObject):
@@ -108,20 +109,34 @@ class ROSBridge(QObject):
     # Service / action helpers
     # =========================================================
 
+    # def _activate_servo(self):
+    #     """
+    #     Switch MoveIt Servo into correct command mode.
+    #     Runs in a background thread so UI is never blocked.
+    #     """
+    #     def _do():
+    #         client = self.node.create_client(
+    #             ServoCommandType,
+    #             '/servo_node/switch_command_type'
+    #         )
+
+    #         if client.wait_for_service(timeout_sec=10.0):
+    #             req = ServoCommandType.Request()
+    #             req.command_type = 1
+    #             client.call_async(req)
+
+        # threading.Thread(target=_do, daemon=True).start()
+
     def _activate_servo(self):
-        """
-        Switch MoveIt Servo into correct command mode.
-        Runs in a background thread so UI is never blocked.
-        """
+
         def _do():
             client = self.node.create_client(
-                ServoCommandType,
-                '/servo_node/switch_command_type'
+                Trigger,
+                '/servo_node/start_servo'
             )
 
             if client.wait_for_service(timeout_sec=10.0):
-                req = ServoCommandType.Request()
-                req.command_type = 1
+                req = Trigger.Request()
                 client.call_async(req)
 
         threading.Thread(target=_do, daemon=True).start()

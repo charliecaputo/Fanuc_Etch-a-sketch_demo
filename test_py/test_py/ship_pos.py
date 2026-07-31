@@ -73,16 +73,16 @@ class CartesianStartInitializer(Node):
             10
         )
         
-        self.shipping_joints = [
-            -0.01629250888811002,
-            0.3601057039025047,
-            -1.1950727630225406,
-            -0.19185376050363034,
-            -0.0012348648759089413,
-            0.20814446123443042
-        ]
+        self.shipping_joints = {
+            "J1": -0.01629250888811002,
+            "J2":  0.3601057039025047,
+            "J3": -1.1950727630225406,
+            "J4": -0.19185376050363034,
+            "J5": -0.0012348648759089413,
+            "J6":  0.20814446123443042,
+        }
 
-        self.joint_tolerance = 0.04  # radians (adjust if needed)
+        self.joint_tolerance = 0.1  # radians (adjust if needed)
         self.direction = 1  # 1 = enter shipping, -1 = leave
 
         # -----------------------------
@@ -95,11 +95,11 @@ class CartesianStartInitializer(Node):
             },
             {
                 "position": (0.30, -0.07, 0.15),
-                "orientation": (0.0, 0.41, 0.0, 1.0),
+                "orientation": (0.0, 0.382683, 0.0, 0.923880),
             },
             {
                 "position": (0.17, -0.15, 0.05),
-                "orientation": (0.0, 0.82, 0.0, 1.0),
+                "orientation": (0.0, 0.707107, 0.0, 0.707107),
             },
         ]
 
@@ -125,17 +125,35 @@ class CartesianStartInitializer(Node):
     # =========================================================
     # JOINT STATE CALLBACK
     # =========================================================
-    def joint_state_cb(self, msg: JointState):
+    def joint_state_cb(self, msg):
+        if not hasattr(self, "_printed_joint_order"):
+            self.get_logger().info(
+                f"joint order = {list(msg.name)}"
+            )
+            self._printed_joint_order = True
+
         self.latest_joint_state = msg
+
         self.joint_state_received = True
         if not hasattr(self, "_published_initial_state"):
             self.publish_ship_state(
-                self.is_at_shipping_pose(msg.position)
+                self.is_at_shipping_pose(msg)
             )
             self._published_initial_state = True
         
     def ship_pose_cb(self, msg: Bool):
-        # Ignore False messages (only rising edge triggers motion)
+
+        try:
+            self.get_logger().info(
+                f"ship_pose_cb called, data={msg.data}"
+            )
+
+            # existing code
+
+        except Exception as e:
+            self.get_logger().error(
+                f"Exception: {e}"
+            )
         if not msg.data:
             return
 
@@ -157,7 +175,23 @@ class CartesianStartInitializer(Node):
         current_positions = self.latest_joint_state.position
 
         # Decide direction based on current pose
-        if self.is_at_shipping_pose(current_positions):
+
+        for name, pos in zip(
+            self.latest_joint_state.name,
+            self.latest_joint_state.position):
+
+            if name not in self.shipping_joints:
+                continue
+
+            target = self.shipping_joints[name]
+
+            self.get_logger().info(
+                f"{name}: actual={pos:.3f} "
+                f"target={target:.3f} "
+                f"diff={abs(pos-target):.3f}"
+            )
+
+        if self.is_at_shipping_pose(self.latest_joint_state):
             self.get_logger().info("Leaving shipping position.")
             self.waypoints = list(reversed(self.shipping_waypoints))
         else:
@@ -169,13 +203,20 @@ class CartesianStartInitializer(Node):
         self.seed_state.joint_state = self.latest_joint_state
 
         self.solve_next_waypoint()
-    
-    def is_at_shipping_pose(self, joint_positions):
-        if joint_positions is None or len(joint_positions) < 6:
-            return False
+        
 
-        for actual, target in zip(joint_positions[:6], self.shipping_joints):
-            if abs(actual - target) > self.joint_tolerance:
+    def is_at_shipping_pose(self, joint_state):
+        for name, pos in zip(
+            joint_state.name,
+            joint_state.position
+        ):
+
+            if name not in self.shipping_joints:
+                continue
+
+            target = self.shipping_joints[name]
+
+            if abs(pos - target) > self.joint_tolerance:
                 return False
 
         return True
@@ -250,6 +291,7 @@ class CartesianStartInitializer(Node):
 
         js = result.solution.joint_state
 
+
         self.joint_solutions.append(js.position)
 
         # seed next IK with current solution
@@ -259,6 +301,7 @@ class CartesianStartInitializer(Node):
         self.current_waypoint += 1
 
         self.solve_next_waypoint()
+        
 
     # =========================================================
     # PUBLISH TRAJECTORY

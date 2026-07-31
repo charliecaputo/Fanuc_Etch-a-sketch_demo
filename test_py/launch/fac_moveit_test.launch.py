@@ -29,7 +29,7 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 
-ROBOT_MODEL = "crx10ia"
+ROBOT_MODEL = "crx5ia"
 
 
 def launch_setup(context, *args, **kwargs):
@@ -115,7 +115,7 @@ def launch_setup(context, *args, **kwargs):
     urdf_full_path = os.path.join(
         get_package_share_directory("fanuc_hardware_interface"),
         "robot",
-        "crx10ia.urdf.xacro",
+        ROBOT_MODEL+".urdf.xacro",
     )
 
     moveit_config = (
@@ -128,7 +128,7 @@ def launch_setup(context, *args, **kwargs):
             mappings=description_arguments,
         )
         .robot_description_semantic(
-            file_path="srdf/crx10ia.srdf"
+            file_path="srdf/" + ROBOT_MODEL + ".srdf"
         )
         .trajectory_execution(
             file_path="config/moveit_controllers.yaml"
@@ -173,9 +173,10 @@ def launch_setup(context, *args, **kwargs):
         "EAS_servo.yaml"
     ])
 
+    print("servo_config_file =", servo_config_file)
     servo_node = Node(
         package="moveit_servo",
-        executable="servo_node",
+        executable="servo_node_main",
         #output="screen",
         parameters=[
             moveit_config.to_dict(),
