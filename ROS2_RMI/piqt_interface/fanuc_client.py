@@ -20,28 +20,32 @@ COMMAND_TIMEOUT = 180.0
 class FanucRMIClient:
 
     def __init__(self, ip):
-
         self.ip = ip
-
         self.sock = None
         self.connected = False
+        self.packet_callbacks = []
 
-        #
+        # Receive buffer
+        self.rx_buffer = ""
         # Sequence tracking
-        #
-        self.next_sequence_id = 1
+        self.next_sequence_id = None
+        self.sequence_ready = threading.Event()
+        # Status tracking
+        self.status_event = threading.Event()
+        self.last_status = None
+        # Initialization tracking
+        self.initialized = False
+        # Disconnect tracking
+        self.disconnect_event = threading.Event()
+        # Commands
         self.pending_sequences = set()
-
-        #
         # Thread management
-        #
         self.running = False
         self.receiver_thread = None
-
+        
         self.lock = threading.Lock()
-
         self._connect()
-        self.rx_buffer = ""
+        
 
 
     #
@@ -64,6 +68,7 @@ class FanucRMIClient:
             HANDSHAKE_TIMEOUT
         )
 
+        
         self.sock.connect(
             (
                 self.ip,
@@ -146,14 +151,18 @@ class FanucRMIClient:
             COMMAND_TIMEOUT
         )
 
-
+        print(
+            f"Connecting to RMI session port {session_port}"
+        )
         self.sock.connect(
             (
                 self.ip,
                 session_port
             )
         )
-
+        print(
+            "RMI session socket connected"
+        )
 
         self.connected = True
 
@@ -183,6 +192,15 @@ class FanucRMIClient:
     # Sending
     # ---------------------------------------------------------
     #
+
+    def add_packet_callback(
+        self,
+        callback
+    ):
+
+        self.packet_callbacks.append(
+            callback
+        )
 
     def send(self, packet):
 
@@ -274,33 +292,35 @@ class FanucRMIClient:
                     print("RX:")
                     print(packet)
 
+                    for callback in self.packet_callbacks:
+                        try:
+
+                            callback(packet)
+
+                        except Exception as e:
+
+                            print(
+                                f"Packet callback error: {e}"
+                            )
+
 
                     if not isinstance(packet, dict):
                         continue
-
-
-
                     #
                     # Motion completion
                     #
-                    if (
-                        "Instruction" in packet
-                        and
-                        "SequenceID" in packet
-                    ):
+                    if "Instruction" in packet and "SequenceID" in packet:
+
+                        seq = packet["SequenceID"]
+                        err = packet.get("ErrorID", 0)
 
                         with self.lock:
+                            self.pending_sequences.discard(seq)
 
-                            seq = packet["SequenceID"]
-
-                            if seq in self.pending_sequences:
-                                self.pending_sequences.remove(seq)
-
-
-                        print(
-                            "Completed:",
-                            packet["SequenceID"]
-                        )
+                        if err == 0:
+                            print(f"Motion {seq} completed")
+                        else:
+                            print(f"Motion {seq} failed (ErrorID={err})")
 
 
 
@@ -310,27 +330,76 @@ class FanucRMIClient:
                     elif "NextSequenceID" in packet:
 
                         with self.lock:
+                            self.last_status = packet
+                            self.next_sequence_id = packet["NextSequenceID"]
 
-                            self.next_sequence_id = (
-                                packet["NextSequenceID"]
-                            )
-
+                        self.status_event.set()
+                        self.sequence_ready.set()
 
                         print(
                             "Robot next sequence:",
                             self.next_sequence_id
                         )
 
+                        print(
+                            "ServoReady:",
+                            packet.get("ServoReady")
+                        )
+                    
+                    elif (packet.get("Communication") == "FRC_Disconnect"):
+                            print("Disconnect acknowledged")
+                            self.disconnect_event.set()
 
-            except Exception as e:
 
-                print(
-                    f"Receiver error: {e}"
-                )
-
+            except OSError:
                 break
 
+            except Exception as e:
+                print(f"Receiver error: {e}")
+                break
 
+    def send_json(
+        self,
+        command
+    ):
+
+        if "Instruction" in command:
+
+            while self.outstanding_commands >= 2:
+                time.sleep(0.01)
+
+            command["SequenceID"] = self.get_next_sequence()
+
+            with self.lock:
+                self.pending_sequences.add(
+                    command["SequenceID"]
+                )
+
+        data = (
+            json.dumps(command)
+            + "\r\n"
+        )
+
+        print("TX:")
+        print(data)
+
+        with self.lock:
+            self.sock.sendall(
+                data.encode("utf-8")
+            )
+
+    def get_status(self):
+
+        self.status_event.clear()
+
+        self.send(
+            StatusRequestPacket()
+        )
+
+        if not self.status_event.wait(timeout=5.0):
+            raise RuntimeError(
+                "No status response from robot"
+            )
 
     #
     # ---------------------------------------------------------
@@ -339,41 +408,109 @@ class FanucRMIClient:
     #
 
     def initialize_robot(self):
+        #
+        # Get current robot state
+        #
+        self.get_status()
 
-        self.send(
-            InitializePacket(
-                GroupMask=1
+        if self.last_status is None:
+            raise RuntimeError(
+                "No status information available"
             )
+
+        rmi_motion_status = self.last_status.get(
+            "RMIMotionStatus"
         )
 
-        time.sleep(0.5)
+        servo_ready = self.last_status.get(
+            "ServoReady"
+        )
 
         print(
-            "FANUC RMI ready"
+            "ServoReady:",
+            servo_ready
+        )
+
+        print(
+            "RMIMotionStatus:",
+            rmi_motion_status
         )
 
 
+        #
+        # RMI already initialized
+        #
+        if rmi_motion_status == 1:
 
-    def get_status(self):
+            print(
+                "RMI already initialized, skipping initialization"
+            )
 
-        self.send(
-            StatusRequestPacket()
+            self.initialized = True
+            return
+
+
+        #
+        # RMI needs initialization
+        #
+        if rmi_motion_status == 0:
+
+            print(
+                "RMI motion inactive, initializing"
+            )
+
+            self.send(
+                InitializePacket(
+                    GroupMask=1
+                )
+            )
+
+            #
+            # Allow controller to update state
+            #
+            time.sleep(0.5)
+
+            #
+            # Verify initialization succeeded
+            #
+            self.get_status()
+
+            if self.last_status.get("RMIMotionStatus") != 1:
+
+                raise RuntimeError(
+                    "RMI initialization failed"
+                )
+
+            self.initialized = True
+
+            print(
+                "RMI initialization successful"
+            )
+
+            return
+
+
+        #
+        # Unexpected response
+        #
+        raise RuntimeError(
+            f"Unexpected RMIMotionStatus: {rmi_motion_status}"
         )
-
-
 
     #
     # ---------------------------------------------------------
     # Sequence helpers
     # ---------------------------------------------------------
     #
-
     def get_next_sequence(self):
+        if not self.sequence_ready.wait(timeout=5.0):
+            raise RuntimeError(
+                "Sequence ID not initialized"
+            )
 
         with self.lock:
 
             sequence = self.next_sequence_id
-
             self.next_sequence_id += 1
 
             return sequence
@@ -394,21 +531,41 @@ class FanucRMIClient:
     # ---------------------------------------------------------
     #
 
+    def close_socket_only(self):
+
+        self.running = False
+
+        if self.sock:
+
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+
+            except OSError:
+                pass
+
+            self.sock.close()
+
+        self.connected = False
+
     def close(self):
 
-        print(
-            "Closing FANUC connection"
-        )
-
+        print("Closing FANUC connection")
 
         try:
 
             if self.connected:
 
+                self.disconnect_event.clear()
+
                 self.send(
                     DisconnectPacket()
                 )
 
+                #
+                # Wait for controller acknowledgement
+                #
+                if not self.disconnect_event.wait(timeout=5.0):
+                    print("Timed out waiting for disconnect acknowledgement")
 
         except Exception as e:
 
@@ -416,25 +573,25 @@ class FanucRMIClient:
                 f"Disconnect error: {e}"
             )
 
-
+        #
+        # Stop receiver
+        #
         self.running = False
 
-
-        if self.receiver_thread:
-
-            self.receiver_thread.join(
-                timeout=1.0
-            )
-
-
+        #
+        # Closing the socket unblocks recv()
+        #
         if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
             self.sock.close()
 
+        if self.receiver_thread:
+            self.receiver_thread.join(timeout=2.0)
 
         self.connected = False
 
-
-        print(
-            "Disconnected"
-        )
+        print("Disconnected")

@@ -25,7 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             "rmi_interface = piqt_interface.rmi_interface:main",
-            "test_rmi = piqt_interface.test_rmi:main"
+            "test_rmi = piqt_interface.test_rmi:main",
+            "robot_connection = piqt_interface.robot_connection:main"
         ],
     },
 )

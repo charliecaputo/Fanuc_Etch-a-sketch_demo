@@ -110,8 +110,8 @@ DEFAULT_GROUP_NUMBER = 1
 
 DEFAULT_SEQUENCE_ID = 1
 
-SOCKET_TIMEOUT = 5
-COMMAND_TIMEOUT = 180
+SOCKET_TIMEOUT = 300
+COMMAND_TIMEOUT = 300
 
 RMI_HANDSHAKE_PORT = 16001
 
@@ -156,6 +156,24 @@ class RMIClient:
         self.last_received_sequence_id = None
         self.expected_sequence_id = None
 
+    def reset_transport(self):
+        """Close any active socket and restore default transport state."""
+
+        if self.socket is not None:
+
+            try:
+
+                self.socket.close()
+
+            except OSError:
+
+                pass
+
+            self.socket = None
+
+        self.connected = False
+        self.port = RMI_HANDSHAKE_PORT
+
     # -------------------------------------------------------------------------
     # Connection Management
     # -------------------------------------------------------------------------
@@ -175,118 +193,135 @@ class RMIClient:
         """
 
         self.robot_ip = robot_ip
+        self.reset_transport()
 
-        # Create a temporary handshake connection to the robot
-        self.socket = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_STREAM
-        )
-
-        self.socket.settimeout(
-            SOCKET_TIMEOUT
-        )
-
-        self.socket.connect(
-            (robot_ip, self.port)
-        )
-
-        #
-        # Send FANUC connection request
-        #
-        connect_packet = ConnectROS2Packet()
-
-        connect_json = (
-            connect_packet.to_json()
-            + "\r\n"
-        )
-
-        print(
-            f"TX: {connect_json}"
-        )
-
-        self.socket.sendall(
-            connect_json.encode("utf-8")
-        )
-
-        #
-        # Receive connection response
-        #
         try:
 
-            data = self.socket.recv(
-                4096
+            # Create a temporary handshake connection to the robot.
+            self.socket = socket.socket(
+                socket.AF_INET,
+                socket.SOCK_STREAM
             )
 
-        except socket.timeout:
-
-            raise RuntimeError(
-                "Robot response timeout exceeded "
-                f"({COMMAND_TIMEOUT} seconds)"
+            self.socket.settimeout(
+                SOCKET_TIMEOUT
             )
 
-        response = data.decode(
-            "utf-8"
-        )
-
-        print(
-            f"CONNECT RESPONSE: {response}"
-        )
-
-        response_json = json.loads(
-            response
-        )
-
-        if response_json["ErrorID"] != 0:
-
-            raise RuntimeError(
-                f"RMI Error: {response_json['ErrorID']}"
+            self.socket.connect(
+                (
+                    robot_ip,
+                    RMI_HANDSHAKE_PORT
+                )
             )
 
-        new_port = response_json[
-            "PortNumber"
-        ]
+            #
+            # Send FANUC connection request
+            #
+            connect_packet = ConnectROS2Packet()
 
-        print(
-            f"RMI Version: "
-            f"{response_json['MajorVersion']}."
-            f"{response_json['MinorVersion']}"
-        )
-
-        print(
-            f"Assigned RMI Port: {new_port}"
-        )
-
-        #
-        # Close the handshake socket
-        #
-        self.socket.close()
-
-        #
-        # Create the actual RMI session socket
-        #
-        self.socket = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_STREAM
-        )
-
-        self.socket.settimeout(
-            COMMAND_TIMEOUT
-        )
-
-        self.socket.connect(
-            (
-                robot_ip,
-                new_port
+            connect_json = (
+                connect_packet.to_json()
+                + "\r\n"
             )
-        )
 
-        self.port = new_port
+            print(
+                f"TX: {connect_json}"
+            )
 
-        print(
-            f"Connected to RMI Port: {new_port}"
-        )
+            self.socket.sendall(
+                connect_json.encode("utf-8")
+            )
 
-        self.connected = True
+            #
+            # Receive connection response
+            #
+            try:
+
+                data = self.socket.recv(
+                    4096
+                )
+
+            except socket.timeout:
+
+                raise RuntimeError(
+                    "Robot response timeout exceeded "
+                    f"({SOCKET_TIMEOUT} seconds)"
+                )
+
+            if not data:
+
+                raise RuntimeError(
+                    "Robot closed the handshake connection"
+                )
+
+            response = data.decode(
+                "utf-8"
+            )
+
+            print(
+                f"CONNECT RESPONSE: {response}"
+            )
+
+            response_json = json.loads(
+                response
+            )
+
+            if response_json["ErrorID"] != 0:
+
+                raise RuntimeError(
+                    f"RMI Error: {response_json['ErrorID']}"
+                )
+
+            new_port = response_json[
+                "PortNumber"
+            ]
+
+            print(
+                f"RMI Version: "
+                f"{response_json['MajorVersion']}."
+                f"{response_json['MinorVersion']}"
+            )
+
+            print(
+                f"Assigned RMI Port: {new_port}"
+            )
+
+            #
+            # Close the handshake socket
+            #
+            self.socket.close()
+
+            #
+            # Create the actual RMI session socket
+            #
+            self.socket = socket.socket(
+                socket.AF_INET,
+                socket.SOCK_STREAM
+            )
+
+            self.socket.settimeout(
+                COMMAND_TIMEOUT
+            )
+
+            self.socket.connect(
+                (
+                    robot_ip,
+                    new_port
+                )
+            )
+
+            self.port = new_port
+
+            print(
+                f"Connected to RMI Port: {new_port}"
+            )
+
+            self.connected = True
+
+        except Exception:
+
+            self.reset_transport()
+            raise
 
     def disconnect(self):
         """
@@ -328,13 +363,7 @@ class RMIClient:
 
         finally:
 
-            if self.socket is not None:
-
-                self.socket.close()
-
-                self.socket = None
-
-            self.connected = False
+            self.reset_transport()
 
     # -------------------------------------------------------------------------
     # Communication Functions
@@ -361,9 +390,19 @@ class RMIClient:
             f"TX: {json_data}"
         )
 
-        self.socket.sendall(
-            json_data.encode("utf-8")
-        )
+        try:
+
+            self.socket.sendall(
+                json_data.encode("utf-8")
+            )
+
+        except OSError as exc:
+
+            self.reset_transport()
+
+            raise RuntimeError(
+                f"Socket send failed: {exc}"
+            ) from exc
 
     def receive(self):
         """
@@ -388,9 +427,27 @@ class RMIClient:
 
         except socket.timeout:
 
+            self.reset_transport()
+
             raise RuntimeError(
                 f"Robot response timeout "
                 f"({COMMAND_TIMEOUT} seconds)"
+            )
+
+        except OSError as exc:
+
+            self.reset_transport()
+
+            raise RuntimeError(
+                f"Socket receive failed: {exc}"
+            ) from exc
+
+        if not data:
+
+            self.reset_transport()
+
+            raise RuntimeError(
+                "Robot closed the connection"
             )
 
         response = data.decode(
@@ -2925,9 +2982,7 @@ class MainWindow(QMainWindow):
             f"Receiver Error: {message}"
         )
 
-        self.rmi.connected = False
-        self.rmi_initialized = False
-        self.update_connection_status_label()
+        self.on_disconnect()
 
     def on_disconnect(self):
         """

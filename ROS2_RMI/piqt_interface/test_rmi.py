@@ -3,15 +3,15 @@
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import Float32MultiArray
+import json
+
+from std_msgs.msg import Float32MultiArray, String
 
 from piqt_interface.rmi_packets import (
     LinearMotionPacket,
     PositionData,
     ConfigurationData
 )
-
-from piqt_interface.fanuc_client import FanucRMIClient
 
 
 
@@ -25,52 +25,28 @@ class EtchSketchNode(Node):
 
 
         #
-        # FANUC workspace limits (mm)
+        # FANUC workspace limits
         #
-        self.WS_X_MIN = 420.0
-        self.WS_X_MAX = 680.0
+        self.WS_X_MIN = 400
+        self.WS_X_MAX = 600
 
-        self.WS_Y_MIN = -285.0
-        self.WS_Y_MAX = 285.0
+        self.WS_Y_MIN = -200
+        self.WS_Y_MAX = 200
 
 
         #
-        # AS5600 limits
+        # Encoder limits
         #
         self.ENC_MIN_DEG = 3.0
         self.ENC_MAX_DEG = 357.0
 
 
         #
-        # RMI control
-        #
-        self.robot_ready = False
-
-        # Only allow one command in flight
-        self.max_outstanding = 2
-
-
-        #
-        # Initial robot position
-        #
-        self.target_x = (
-            self.WS_X_MIN +
-            self.WS_X_MAX
-        ) / 2.0
-
-        self.target_y = 0.0
-
-
-        #
-        # Last transmitted position
+        # Command control
         #
         self.last_sent_x = None
         self.last_sent_y = None
 
-
-        #
-        # Ignore encoder jitter smaller than this
-        #
         self.position_deadband = 1.0
 
 
@@ -81,34 +57,44 @@ class EtchSketchNode(Node):
 
 
         #
-        # FANUC RMI
+        # Current target
         #
-        self.robot = FanucRMIClient(
-            "10.69.17.244"
+        self.target_x = (
+            self.WS_X_MIN +
+            self.WS_X_MAX
+        ) / 2.0
+
+        self.target_y = 0.0
+
+
+
+        #
+        # ROS interfaces
+        #
+
+        #
+        # Send commands to robot_connection
+        #
+        self.command_pub = self.create_publisher(
+            String,
+            "/robot_command",
+            10
         )
 
 
-        try:
-
-            self.robot.initialize_robot()
-
-            self.robot_ready = True
-
-            self.get_logger().info(
-                "Robot initialized."
-            )
-
-
-        except Exception as e:
-
-            self.get_logger().error(
-                f"Initialization failed: {e}"
-            )
-
+        #
+        # Receive robot responses
+        #
+        self.response_sub = self.create_subscription(
+            String,
+            "/robot_response",
+            self.response_callback,
+            10
+        )
 
 
         #
-        # Encoder subscriptions
+        # Encoder inputs
         #
         self.create_subscription(
             Float32MultiArray,
@@ -127,12 +113,44 @@ class EtchSketchNode(Node):
 
 
         #
-        # FANUC command loop
+        # Motion timer
         #
         self.motion_timer = self.create_timer(
             0.1,
             self.send_motion
         )
+
+
+        self.get_logger().info(
+            "EtchSketch motion node started"
+        )
+
+
+
+    #
+    # ---------------------------------------------------------
+    # Robot responses
+    # ---------------------------------------------------------
+    #
+
+    def response_callback(self, msg):
+
+        try:
+
+            response = json.loads(
+                msg.data
+            )
+
+            self.get_logger().info(
+                f"Robot response: {response}"
+            )
+
+
+        except Exception as e:
+
+            self.get_logger().error(
+                f"Bad robot response: {e}"
+            )
 
 
 
@@ -148,11 +166,8 @@ class EtchSketchNode(Node):
             return
 
 
-        angle_deg = msg.data[0]
-
-
         self.target_x = self.map_range(
-            angle_deg,
+            msg.data[0],
             self.ENC_MIN_DEG,
             self.ENC_MAX_DEG,
             self.WS_X_MIN,
@@ -167,11 +182,8 @@ class EtchSketchNode(Node):
             return
 
 
-        angle_deg = msg.data[0]
-
-
         self.target_y = self.map_range(
-            angle_deg,
+            msg.data[0],
             self.ENC_MIN_DEG,
             self.ENC_MAX_DEG,
             self.WS_Y_MIN,
@@ -182,27 +194,11 @@ class EtchSketchNode(Node):
 
     #
     # ---------------------------------------------------------
-    # FANUC motion
+    # Send RMI motion command
     # ---------------------------------------------------------
     #
 
     def send_motion(self):
-
-        if not self.robot_ready:
-            return
-
-
-
-        #
-        # Prevent RMI flooding
-        #
-        if (
-            self.robot.outstanding_commands
-            >= self.max_outstanding
-        ):
-            return
-
-
 
         #
         # Ignore tiny movements
@@ -230,12 +226,13 @@ class EtchSketchNode(Node):
 
 
         #
-        # Build FANUC packet
+        # Build FANUC RMI packet
         #
         packet = LinearMotionPacket()
 
 
         packet.Configuration = ConfigurationData(
+
             UToolNumber=1,
             UFrameNumber=0,
 
@@ -250,8 +247,8 @@ class EtchSketchNode(Node):
         )
 
 
-
         packet.Position = PositionData(
+
             X=self.target_x,
             Y=self.target_y,
             Z=self.robot_z,
@@ -263,19 +260,27 @@ class EtchSketchNode(Node):
 
 
         packet.SpeedType = "mmSec"
-
-        # safer for live encoder following
-        packet.Speed = 100
-
+        packet.Speed = 200
 
         packet.TermType = "CNT"
-
         packet.TermValue = 100
 
 
 
-        sequence = self.robot.send_motion(
-            packet
+        #
+        # Convert packet to JSON
+        #
+        command = String()
+
+        command.data = packet.to_json()
+
+
+
+        #
+        # Publish to robot_connection
+        #
+        self.command_pub.publish(
+            command
         )
 
 
@@ -284,17 +289,14 @@ class EtchSketchNode(Node):
 
 
         self.get_logger().info(
-            f"Sent {sequence}: "
-            f"X={self.target_x:.1f}, "
-            f"Y={self.target_y:.1f}, "
-            f"queue={self.robot.outstanding_commands}"
+            f"Command sent X={self.target_x:.1f}, Y={self.target_y:.1f}"
         )
 
 
 
     #
     # ---------------------------------------------------------
-    # Utilities
+    # Utility
     # ---------------------------------------------------------
     #
 
@@ -351,10 +353,9 @@ def main():
     finally:
 
         node.get_logger().info(
-            "Disconnecting from FANUC..."
+            "Stopping motion node"
         )
 
-        node.robot.close()
 
         node.destroy_node()
 
