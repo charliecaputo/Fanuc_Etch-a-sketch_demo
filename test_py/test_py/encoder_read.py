@@ -32,7 +32,7 @@ class AS5600MuxNode(Node):
         self.declare_parameter('x_channel', 1)
         self.declare_parameter('y_channel', 0)
 
-        self.declare_parameter('publish_hz', 100.0)
+        self.declare_parameter('publish_hz', 50.0)
 
         # X calibration
         self.declare_parameter('x_zero_deg', 0.0)
@@ -206,13 +206,15 @@ class AS5600MuxNode(Node):
                 self.y_max
             )
 
-             #pub x
+            #pub x
             x_msg = Float32MultiArray()
             x_msg.data = [float(x_deg), float(x_mm)]
+            #x_msg.data = [200.0, 200.0]
             self.x_publisher.publish(x_msg)
             #pub y
             y_msg = Float32MultiArray()
             y_msg.data = [float(y_deg), float(y_mm)]
+            #y_msg.data = [200.0, 200.0]
             self.y_publisher.publish(y_msg)
 
         except Exception as exc:
