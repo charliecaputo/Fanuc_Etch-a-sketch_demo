@@ -365,7 +365,7 @@ class FanucRMIClient:
 
         if "Instruction" in command:
 
-            while self.outstanding_commands >= 2:
+            while self.outstanding_commands >= 1:
                 time.sleep(0.01)
 
             command["SequenceID"] = self.get_next_sequence()
@@ -569,29 +569,20 @@ class FanucRMIClient:
 
         except Exception as e:
 
-            print(
-                f"Disconnect error: {e}"
-            )
+            print(f"Disconnect error: {e}")
 
-        #
         # Stop receiver
-        #
         self.running = False
 
-        #
         # Closing the socket unblocks recv()
-        #
         if self.sock:
             try:
                 self.sock.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
-
             self.sock.close()
 
         if self.receiver_thread:
             self.receiver_thread.join(timeout=2.0)
-
         self.connected = False
-
         print("Disconnected")
