@@ -1,5 +1,54 @@
 #!/usr/bin/env python3
 
+"""
+robot_connection.py
+
+Overview:
+    This ROS 2 node provides a communication bridge between ROS 2 and a
+    FANUC robot using the FANUC RMI client.
+
+    The node performs two main functions:
+
+    1. ROS 2 -> FANUC:
+       - Subscribes to the /robot_command topic.
+       - Expects commands as JSON-formatted strings.
+       - Converts the received string into a Python dictionary/object.
+       - Sends the command to the FANUC robot through the RMI connection.
+
+    2. FANUC -> ROS 2:
+       - Registers a callback with the FANUC RMI client.
+       - Receives packets/data from the robot.
+       - Converts the received data into a JSON-formatted string.
+       - Publishes the data on the /robot_response topic.
+
+    ROS Interfaces:
+        Subscriber:
+            /robot_command
+            Type: std_msgs/msg/String
+            Purpose: Receives JSON commands intended for the FANUC robot.
+
+        Publisher:
+            /robot_response
+            Type: std_msgs/msg/String
+            Purpose: Publishes JSON-formatted responses/packets received
+                     from the FANUC robot.
+
+    Robot Connection:
+        The node connects to the FANUC controller at:
+            10.69.17.244
+
+        The FANUC RMI connection is initialized when the node starts and
+        properly closed when the node shuts down.
+
+    Error Handling:
+        Errors while processing commands or publishing robot responses are
+        caught and reported through the ROS 2 logger.
+
+    Shutdown:
+        When the ROS 2 node is stopped, the FANUC RMI connection is closed
+        before the node is destroyed.
+"""
+
 import json
 import rclpy
 from rclpy.node import Node
