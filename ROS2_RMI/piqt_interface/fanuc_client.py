@@ -1,3 +1,105 @@
+"""
+fanuc_client.py
+
+Overview:
+    This module provides the FanucRMIClient class, which manages the TCP/IP
+    communication between ROS 2 applications and a FANUC robot using the
+    FANUC Remote Motion Interface (RMI).
+
+    The client is responsible for:
+
+    1. FANUC RMI Connection:
+       - Connects to the FANUC controller using TCP/IP.
+       - Establishes an initial handshake on port 16001.
+       - Requests an RMI session from the FANUC controller.
+       - Receives the session port assigned by the controller.
+       - Closes the handshake connection and establishes a dedicated RMI
+         session connection.
+
+    2. Asynchronous Robot Communication:
+       - Starts a dedicated receiver thread after the RMI session is created.
+       - Continuously listens for incoming FANUC packets.
+       - Buffers incoming data until complete JSON messages are received.
+       - Uses CRLF (\\r\\n) as the packet delimiter.
+       - Converts received JSON messages into Python objects.
+       - Passes received packets to registered callback functions.
+
+    3. Packet Transmission:
+       - Provides methods for sending RMI packet objects directly.
+       - Provides send_json() for sending JSON commands.
+       - Automatically appends the required CRLF packet terminator.
+       - Tracks motion commands using FANUC SequenceID values.
+
+    4. Sequence ID Management:
+       - Requests the robot's current status to obtain the next available
+         SequenceID.
+       - Tracks the next SequenceID locally.
+       - Assigns SequenceIDs to motion commands.
+       - Tracks commands that are currently pending.
+       - Removes completed commands from the pending command set.
+
+    5. Robot Status:
+       - Requests the current FANUC robot status.
+       - Stores the most recent status packet.
+       - Tracks the robot's next available SequenceID.
+       - Monitors the ServoReady state.
+       - Monitors the RMIMotionStatus state.
+
+    6. RMI Initialization:
+       - Checks the current RMIMotionStatus when initialize_robot() is called.
+       - If RMI motion is already initialized, no additional initialization
+         command is sent.
+       - If RMI motion is inactive, sends an InitializePacket.
+       - Requests the status again to verify that initialization succeeded.
+       - Raises an error if the expected initialized state is not reached.
+
+    7. Robot Response Handling:
+       - Detects motion completion packets using Instruction and SequenceID.
+       - Reports whether individual motion commands completed successfully
+         or returned an ErrorID.
+       - Detects status responses containing NextSequenceID.
+       - Detects acknowledgement of the FANUC disconnect request.
+       - Reports malformed JSON and receiver errors.
+
+    8. Callback Support:
+       - Allows external nodes to register packet callback functions.
+       - Each received packet is passed to every registered callback.
+       - Callback errors are caught so that one callback does not terminate
+         the receiver thread.
+
+    9. Thread and Socket Management:
+       - Uses a dedicated receiver thread for asynchronous communication.
+       - Uses a threading lock to protect shared command and sequence data.
+       - Uses threading events to synchronize status responses, SequenceID
+         availability, and disconnect acknowledgements.
+
+    10. Shutdown:
+        - Sends a DisconnectPacket when the client is closed.
+        - Waits for the FANUC controller to acknowledge the disconnect.
+        - Stops the receiver thread.
+        - Shuts down and closes the TCP socket.
+        - Waits briefly for the receiver thread to terminate.
+        - Marks the client as disconnected.
+
+    FANUC Connection:
+        Handshake port:
+            16001
+
+        Handshake timeout:
+            5 seconds
+
+        Command/socket timeout:
+            180 seconds
+
+    Main Class:
+        FanucRMIClient
+
+        The class is designed to be used by higher-level ROS 2 nodes that
+        need to communicate with the FANUC controller without having to
+        directly manage sockets, RMI handshaking, packet reception, or
+        SequenceID management.
+"""
+
 import socket
 import json
 import time
