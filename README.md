@@ -71,5 +71,5 @@ If ever the connection fails. Go to wired settings. See if it says connecting or
 
 
 # Version 2 
-Hey John,\ 
-sorry this project is left in kind of a meesy state as I didn't really have time to build it up in the last couple weeks. Currently the encoder control of the robot works but only when running maunally (not through the hmi). The HMI very partially works. The ship pose button and the home button works but nothing else does. Unfortunatly the whole hmi will likely need to be reworked no that we are using rmi directly. The main branch of the code works for ros2 jazzy and the PC and RPI branches work on Humble. see the read me in PIQT_interface for how to run it the encoder stuff. Best of luck!
+Hey John,
+sorry this project is left in kind of a meesy state as I didn't really have time to build it up in the last couple weeks. Currently the encoder control of the robot works but only when running maunally (not through the hmi). The HMI very partially works. The ship pose button and the home button works but nothing else does. Unfortunatly the whole hmi will likely need to be reworked no that we are using rmi directly. The main branch of the code works for ros2 jazzy and the PC and RPI branches work on Humble. see the read me in ROS2_RMI for how to run it the encoder stuff. Best of luck!
