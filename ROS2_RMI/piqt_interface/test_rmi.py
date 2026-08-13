@@ -1,5 +1,85 @@
 #!/usr/bin/env python3
 
+"""
+test_rmi.py
+
+Overview:
+    This ROS 2 node converts two encoder inputs into X/Y position commands
+    for a FANUC robot, creating an Etch-a-Sketch-style Cartesian motion
+    interface.
+
+    The node performs the following functions:
+
+    1. Encoder Input:
+       - Subscribes to encoder_x_mm and encoder_y_mm.
+       - Reads the encoder values in degrees.
+       - Maps the encoder ranges to the FANUC robot's defined X/Y workspace.
+
+    2. Workspace Limiting:
+       - Restricts the commanded X and Y positions to the defined FANUC
+         workspace limits.
+       - The robot operates on a fixed Z position, creating a 2D drawing plane.
+
+    3. Motion Commands:
+       - Periodically generates FANUC LinearMotionPacket commands.
+       - Commands are sent through the /robot_command ROS 2 topic.
+       - Motion is configured using FANUC RMI position, configuration, speed,
+         and termination parameters.
+
+    4. Position Deadband:
+       - Small movements below the configured deadband are ignored.
+       - When the target enters the deadband, a single CNT 0 hold command is
+         sent to stop the robot at its current commanded position.
+       - This prevents unnecessary repeated motion commands when the encoder
+         is not moving significantly.
+
+    5. Robot Responses:
+       - Subscribes to /robot_response.
+       - Converts incoming JSON responses into Python objects.
+       - Logs the robot responses for monitoring and debugging.
+
+    ROS Interfaces:
+        Publishers:
+            /robot_command
+            Type: std_msgs/msg/String
+            Purpose: Sends JSON-formatted FANUC RMI motion commands.
+
+        Subscribers:
+            /robot_response
+            Type: std_msgs/msg/String
+            Purpose: Receives responses from the FANUC robot connection node.
+
+            encoder_x_mm
+            Type: std_msgs/msg/Float32MultiArray
+            Purpose: Provides the encoder input used to control robot X position.
+
+            encoder_y_mm
+            Type: std_msgs/msg/Float32MultiArray
+            Purpose: Provides the encoder input used to control robot Y position.
+
+    Robot Workspace:
+        X: 400 mm to 600 mm
+        Y: -200 mm to 200 mm
+        Z: Fixed at 0.0 mm
+
+    Encoder Range:
+        3.0 degrees to 357.0 degrees
+
+        Encoder values are clamped to this range before being mapped to the
+        corresponding robot workspace.
+
+    Motion Settings:
+        Command update period: 0.1 seconds (10 Hz)
+        Position deadband: 1.0 mm
+        Linear speed: 200 mm/s
+        Normal termination: CNT 100
+        Deadband hold termination: CNT 0
+
+    Shutdown:
+        When the node is stopped, the motion node is destroyed and ROS 2
+        is properly shut down.
+"""
+
 import rclpy
 from rclpy.node import Node
 import json
